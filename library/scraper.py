@@ -2,11 +2,18 @@
 Genius lyrics scraper. Fetches lyrics from a Genius URL.
 """
 import re
-import urllib.request
+import requests
 
 from bs4 import BeautifulSoup
 
-USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+HEADERS = {
+    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+    "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8",
+    "Accept-Language": "en-US,en;q=0.5",
+    "Accept-Encoding": "gzip, deflate, br",
+    "Connection": "keep-alive",
+    "Upgrade-Insecure-Requests": "1",
+}
 
 # Map section headers to normalized section types
 SECTION_MAP = {
@@ -66,9 +73,9 @@ def scrape_genius(url: str) -> dict:
 
     sections is a list of {"section": str, "lines": list[str]}
     """
-    req = urllib.request.Request(url, headers={"User-Agent": USER_AGENT})
-    resp = urllib.request.urlopen(req, timeout=15)
-    html = resp.read().decode("utf-8")
+    resp = requests.get(url, headers=HEADERS, timeout=15)
+    resp.raise_for_status()
+    html = resp.text
 
     soup = BeautifulSoup(html, "html.parser")
 
