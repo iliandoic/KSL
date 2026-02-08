@@ -5,6 +5,7 @@ from sqlalchemy.orm import Session
 
 from database.connection import get_db
 from database.models import ScrapedSong
+from library.genius_api import get_song_id_from_url, get_song_details
 
 router = APIRouter(prefix="/api/scraped", tags=["scraped"])
 
@@ -57,6 +58,30 @@ def save_scraped(req: SaveScrapedRequest, db: Session = Depends(get_db)):
         db.commit()
         db.refresh(song)
         return {"id": song.id, "status": "created"}
+
+
+@router.post("/backfill-artists")
+def backfill_artists(db: Session = Depends(get_db)):
+    """Backfill artist data from Genius API for existing songs."""
+    songs = db.query(ScrapedSong).filter(ScrapedSong.primary_artist == None).all()
+    updated = 0
+    errors = []
+
+    for song in songs:
+        try:
+            song_id = get_song_id_from_url(song.url)
+            if song_id:
+                details = get_song_details(song_id)
+                song.primary_artist = details.get("primary_artist")
+                song.primary_artist_image = details.get("primary_artist_image")
+                featured = details.get("featured_artists", [])
+                song.featured_artists_json = json.dumps(featured, ensure_ascii=False) if featured else None
+                updated += 1
+        except Exception as e:
+            errors.append({"url": song.url, "error": str(e)})
+
+    db.commit()
+    return {"updated": updated, "errors": errors}
 
 
 @router.get("/list")
