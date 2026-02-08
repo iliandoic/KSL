@@ -112,6 +112,9 @@ export const api = {
         title: string;
         artist: string;
         url: string;
+        primary_artist: string | null;
+        primary_artist_image: string | null;
+        featured_artists: { name: string; image: string }[];
         has_sonnet: boolean;
         has_opus: boolean;
         created_at: string;
@@ -125,6 +128,9 @@ export const api = {
       title: string;
       artist: string;
       url: string;
+      primary_artist: string | null;
+      primary_artist_image: string | null;
+      featured_artists: { name: string; image: string }[];
       original_text: string;
       sections: { section: string; lines: string[] }[];
       sonnet_translations: Record<string, string>;
@@ -148,6 +154,7 @@ export const api = {
         url: string;
         primary_artist: string;
         release_date: string;
+        imported: boolean;
       }[];
     }>(`/genius/artists/${artistId}/songs?limit=${limit}`),
 
