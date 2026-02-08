@@ -342,16 +342,25 @@ Output format:
 
     model_id = "claude-opus-4-5-20251101" if model == "opus" else "claude-sonnet-4-20250514"
 
+    # Use extended thinking for better context understanding
     response = client.messages.create(
         model=model_id,
-        max_tokens=3000,
-        system=system,
+        max_tokens=16000,
+        thinking={
+            "type": "enabled",
+            "budget_tokens": 5000
+        },
         messages=[
-            {"role": "user", "content": f"Translate to {lang_instruction}:\n\n" + "\n".join(f"{i+1}. {l}" for i, l in enumerate(lines))}
+            {"role": "user", "content": system + "\n\n" + f"Translate to {lang_instruction}:\n\n" + "\n".join(f"{i+1}. {l}" for i, l in enumerate(lines))}
         ],
     )
 
-    result_text = response.content[0].text
+    # Extract text from response (skip thinking blocks)
+    result_text = ""
+    for block in response.content:
+        if block.type == "text":
+            result_text = block.text
+            break
 
     # Skip the context line if present, then parse numbered lines
     lines_split = result_text.strip().split("\n")
