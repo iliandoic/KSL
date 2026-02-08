@@ -1,12 +1,14 @@
 import { NavSidebar } from './components/NavSidebar';
 import { FreestylePage } from './components/FreestylePage';
 import { ImportPage } from './components/ImportPage';
+import { SongsPage } from './components/SongsPage';
 import { StudyPage } from './components/StudyPage';
 import { useStore } from './store';
 
 const PAGE_TITLES: Record<string, string> = {
   freestyle: 'Freestyle',
   import: 'Import',
+  songs: 'Songs',
   study: 'Study',
 };
 
@@ -29,6 +31,7 @@ function App() {
         <div className="flex-1 overflow-y-auto">
           {currentPage === 'freestyle' && <FreestylePage />}
           {currentPage === 'import' && <ImportPage />}
+          {currentPage === 'songs' && <SongsPage />}
           {currentPage === 'study' && <StudyPage />}
         </div>
       </div>

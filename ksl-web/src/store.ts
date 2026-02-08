@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 
-type Page = 'freestyle' | 'import' | 'study';
+type Page = 'freestyle' | 'import' | 'study' | 'songs';
 
 interface AppState {
   // Navigation
