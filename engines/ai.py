@@ -293,9 +293,29 @@ def translate_lines(lines: list[str], target_lang: str = "en", model: str = "son
 
     client = _get_client()
 
+    # Detect if source is Spanish (common in reggaeton/trap)
+    sample = " ".join(lines[:10])
+    is_spanish = bool(re.search(r'\b(que|el|la|los|las|yo|tu|mi|un|una|es|en|de|por|para|con|te|me|se|lo|le|qué|está|tiene|quiero|como|pero|eres|soy)\b', sample, re.IGNORECASE))
+
     if target_lang == "bg":
         lang_instruction = "Bulgarian (Cyrillic script)"
-        style_instruction = """Преведи като носител на езика, не буквално.
+        if is_spanish:
+            style_instruction = """Превеждаш от ИСПАНСКИ (reggaeton/trap).
+Това е улична музика - дръзка, секси, агресивна.
+
+ВАЖНО за испански сленг:
+- "safaera" = мръсотия, нещо яко/секси
+- "perreo" = кючек, dirty dancing
+- "bellaqueo" = флирт, секси поведение
+- "cabrón" = яко, брутално (не буквално)
+- "mami/papi" = мацка/мацане
+- "flow" = стил, усещане
+
+Преведи СМИСЪЛА, не думите. Използвай български сленг който звучи естествено.
+Линиите трябва да се свързват и да текат като песен.
+Запази енергията - ако е секси, преводът е секси. Ако е агресивно, преводът е агресивен."""
+        else:
+            style_instruction = """Преведи като носител на езика, не буквално.
 Използвай естествен български сленг и изрази.
 Запази емоцията и енергията - дързък, уличен стил.
 Ако оригиналът е дръзък/секси/агресивен, преводът също трябва да е."""
@@ -312,9 +332,10 @@ This is for personal comprehension and language learning.
 
 {style_instruction}
 
-IMPORTANT:
-- Translate the MEANING and FEELING, not just words
-- Lines should flow together naturally as a song
+CRITICAL:
+- Translate the MEANING and FEELING, not dictionary definitions
+- Each line should connect to the next - this is a SONG, not random sentences
+- Think about what the artist is trying to say, then express that naturally
 - Keep it real - don't sanitize or soften the vibe
 - Output ONLY numbered translations, nothing else"""
 
