@@ -189,24 +189,24 @@ Return JSON only, example format:
 def extract_concepts(lyrics: str) -> list[str]:
     """
     Extract 3-5 high-level concepts from translated lyrics.
-    Returns actionable themes like "proving haters wrong", not single words.
+    Returns actionable themes in Bulgarian like "доказвам на хейтърите", not single words.
     """
     if not lyrics or not lyrics.strip():
         return []
 
     client = _get_client()
 
-    system = """Extract the main concepts/themes from these song lyrics.
-Return 3-5 actionable concepts, not single words.
-Good examples: "proving haters wrong", "self-made success", "revenge on the ex", "luxury lifestyle"
-Bad examples: "love", "money", "success" (too generic)
-Return ONLY a JSON array of strings."""
+    system = """Извлечи основните концепции/теми от текста на песента.
+Върни 3-5 действени концепции на БЪЛГАРСКИ, не единични думи.
+Добри примери: "доказвам на хейтърите", "сам се направих", "отмъщение на бившата", "луксозен живот", "пари над всичко"
+Лоши примери: "любов", "пари", "успех" (твърде общи)
+Върни САМО JSON масив от стрингове на български."""
 
     response = client.messages.create(
         model=settings.AI_MODEL,
         max_tokens=300,
         system=system,
-        messages=[{"role": "user", "content": f"Extract concepts from:\n\n{lyrics}"}],
+        messages=[{"role": "user", "content": f"Извлечи концепции от:\n\n{lyrics}"}],
     )
 
     result_text = response.content[0].text.strip()
@@ -224,24 +224,24 @@ Return ONLY a JSON array of strings."""
 
 def generate_prompts(concepts: list[str]) -> list[str]:
     """
-    Turn concepts into freestyle questions/prompts.
-    Example: "proving haters wrong" -> "Who doubted you?"
+    Turn concepts into freestyle questions/prompts in Bulgarian.
+    Example: "доказвам на хейтърите" -> "Кой се съмняваше в теб?"
     """
     if not concepts:
         return []
 
     client = _get_client()
 
-    system = """Turn these concepts into freestyle questions that a rapper can answer.
-Make them personal, direct, and inspiring.
-Good examples: "Who doubted you?", "What would you do with a million?", "What's your revenge fantasy?"
-Return ONLY a JSON array of strings."""
+    system = """Превърни тези концепции във въпроси за freestyle на БЪЛГАРСКИ.
+Направи ги лични, директни и вдъхновяващи.
+Добри примери: "Кой се съмняваше в теб?", "Какво би направил с милион?", "Каква е твоята фантазия за отмъщение?", "На кого ще покажеш?"
+Върни САМО JSON масив от стрингове на български."""
 
     response = client.messages.create(
         model=settings.AI_MODEL,
         max_tokens=300,
         system=system,
-        messages=[{"role": "user", "content": f"Turn these concepts into questions:\n{concepts}"}],
+        messages=[{"role": "user", "content": f"Превърни тези концепции във въпроси:\n{concepts}"}],
     )
 
     result_text = response.content[0].text.strip()
@@ -254,6 +254,34 @@ Return ONLY a JSON array of strings."""
         return json.loads(result_text)
     except json.JSONDecodeError:
         return []
+
+
+def translate_title(title: str) -> str:
+    """
+    Translate/adapt a song title to Bulgarian.
+    Returns a Bulgarian version that captures the vibe.
+    """
+    if not title or not title.strip():
+        return title
+
+    # If already Cyrillic, return as-is
+    if re.search(r'[\u0400-\u04FF]', title):
+        return title
+
+    client = _get_client()
+
+    system = """Преведи заглавието на песента на български.
+Запази вайба и стила - не буквален превод, а адаптация която звучи добре.
+Върни САМО преведеното заглавие, нищо друго."""
+
+    response = client.messages.create(
+        model=settings.AI_MODEL,
+        max_tokens=50,
+        system=system,
+        messages=[{"role": "user", "content": title}],
+    )
+
+    return response.content[0].text.strip().strip('"\'')
 
 
 def translate_lines(lines: list[str], target_lang: str = "en", model: str = "sonnet") -> list[str]:

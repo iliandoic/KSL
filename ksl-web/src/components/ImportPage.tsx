@@ -18,18 +18,29 @@ interface StudyResult {
   };
 }
 
+interface ArtistSong {
+  id: number;
+  title: string;
+  url: string;
+  imported: boolean;
+}
+
 export function ImportPage() {
   const [url, setUrl] = useState('');
   const [artistQuery, setArtistQuery] = useState('');
   const [artists, setArtists] = useState<{ id: number; name: string }[]>([]);
   const [selectedArtist, setSelectedArtist] = useState<{ id: number; name: string } | null>(null);
-  const [artistSongs, setArtistSongs] = useState<{ id: number; title: string; url: string }[]>([]);
+  const [artistSongs, setArtistSongs] = useState<ArtistSong[]>([]);
   const [selectedSongIds, setSelectedSongIds] = useState<Set<number>>(new Set());
   const [status, setStatus] = useState('');
   const [results, setResults] = useState<StudyResult[]>([]);
   const [progress, setProgress] = useState<{ current: number; total: number } | null>(null);
   const [aiModel, setAiModel] = useState<'sonnet' | 'opus'>('sonnet');
+  const [showImported, setShowImported] = useState(false);
   const { loading, setLoading } = useStore();
+
+  const notImportedSongs = artistSongs.filter(s => !s.imported);
+  const importedSongs = artistSongs.filter(s => s.imported);
 
   const searchArtists = async () => {
     if (!artistQuery.trim()) return;
@@ -74,7 +85,7 @@ export function ImportPage() {
   };
 
   const selectAllSongs = () => {
-    setSelectedSongIds(new Set(artistSongs.map(s => s.id)));
+    setSelectedSongIds(new Set(notImportedSongs.map(s => s.id)));
   };
 
   const deselectAllSongs = () => {
@@ -106,9 +117,19 @@ export function ImportPage() {
 
     setProgress(null);
     setSelectedSongIds(new Set());
-    setArtistSongs([]);
-    setSelectedArtist(null);
     setStatus(`Completed! Processed ${newResults.length} songs.`);
+
+    // Refresh the songs list to update imported status
+    if (selectedArtist) {
+      try {
+        const res = await api.geniusArtistSongs(selectedArtist.id, 100);
+        setArtistSongs(res.songs);
+      } catch {
+        // If refresh fails, just clear the list
+        setArtistSongs([]);
+        setSelectedArtist(null);
+      }
+    }
     setLoading('batch', false);
   };
 
@@ -224,14 +245,14 @@ export function ImportPage() {
               <div className="mt-4 bg-zinc-800/50 rounded-lg p-4">
                 <div className="flex items-center justify-between mb-3">
                   <span className="text-sm text-teal-400 font-medium">
-                    {selectedArtist.name} ({artistSongs.length} songs)
+                    {selectedArtist.name} ({notImportedSongs.length} new, {importedSongs.length} imported)
                   </span>
                   <div className="flex items-center gap-2">
                     <button
-                      onClick={selectedSongIds.size === artistSongs.length ? deselectAllSongs : selectAllSongs}
+                      onClick={selectedSongIds.size === notImportedSongs.length ? deselectAllSongs : selectAllSongs}
                       className="px-2 py-1 text-xs text-zinc-400 hover:text-zinc-200"
                     >
-                      {selectedSongIds.size === artistSongs.length ? 'Deselect All' : 'Select All'}
+                      {selectedSongIds.size === notImportedSongs.length ? 'Deselect All' : 'Select All New'}
                     </button>
                     <button
                       onClick={() => { setSelectedArtist(null); setArtistSongs([]); setSelectedSongIds(new Set()); }}
@@ -242,27 +263,62 @@ export function ImportPage() {
                   </div>
                 </div>
 
-                <div className="max-h-64 overflow-y-auto space-y-1 mb-4">
-                  {artistSongs.map(song => (
-                    <div
-                      key={song.id}
-                      onClick={() => toggleSongSelection(song.id)}
-                      className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm cursor-pointer transition-colors ${
-                        selectedSongIds.has(song.id)
-                          ? 'bg-teal-500/20 border border-teal-500'
-                          : 'bg-zinc-800 border border-zinc-700 hover:border-zinc-600'
-                      }`}
+                {/* Not Imported Songs */}
+                {notImportedSongs.length > 0 && (
+                  <div className="max-h-48 overflow-y-auto space-y-1 mb-4">
+                    {notImportedSongs.map(song => (
+                      <div
+                        key={song.id}
+                        onClick={() => toggleSongSelection(song.id)}
+                        className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm cursor-pointer transition-colors ${
+                          selectedSongIds.has(song.id)
+                            ? 'bg-teal-500/20 border border-teal-500'
+                            : 'bg-zinc-800 border border-zinc-700 hover:border-zinc-600'
+                        }`}
+                      >
+                        <input
+                          type="checkbox"
+                          checked={selectedSongIds.has(song.id)}
+                          onChange={() => {}}
+                          className="accent-teal-500"
+                        />
+                        <span className="flex-1">{song.title}</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                {notImportedSongs.length === 0 && (
+                  <div className="text-sm text-zinc-500 mb-4 py-4 text-center">
+                    All songs from this artist are already imported
+                  </div>
+                )}
+
+                {/* Already Imported Songs (Collapsible) */}
+                {importedSongs.length > 0 && (
+                  <div className="mb-4">
+                    <button
+                      onClick={() => setShowImported(!showImported)}
+                      className="flex items-center gap-2 text-xs text-zinc-500 hover:text-zinc-300 mb-2"
                     >
-                      <input
-                        type="checkbox"
-                        checked={selectedSongIds.has(song.id)}
-                        onChange={() => {}}
-                        className="accent-teal-500"
-                      />
-                      <span className="flex-1">{song.title}</span>
-                    </div>
-                  ))}
-                </div>
+                      <span>{showImported ? '▼' : '▶'}</span>
+                      <span>Already imported ({importedSongs.length})</span>
+                    </button>
+                    {showImported && (
+                      <div className="max-h-32 overflow-y-auto space-y-1 pl-4">
+                        {importedSongs.map(song => (
+                          <div
+                            key={song.id}
+                            className="flex items-center gap-2 px-3 py-2 rounded-lg text-sm bg-zinc-800/50 border border-zinc-700/50 text-zinc-500"
+                          >
+                            <span className="text-green-500">✓</span>
+                            <span className="flex-1">{song.title}</span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
 
                 {selectedSongIds.size > 0 && (
                   <button

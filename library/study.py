@@ -9,7 +9,7 @@ from datetime import datetime
 from sqlalchemy.orm import Session
 
 from database.models import ArtistStudy, ArtistRhymeGroup, ScrapedSong
-from engines.ai import group_rhyme_endings, extract_concepts, generate_prompts
+from engines.ai import group_rhyme_endings, extract_concepts, generate_prompts, translate_title
 from library.themes import detect_theme
 
 
@@ -150,12 +150,13 @@ def study_song(
                 freq_sum = sum(endings.get(e, 0) for e in group_endings)
                 rhyme_group.frequency += freq_sum
 
-    # 2. Add title
+    # 2. Add title (translated to Bulgarian)
     if scraped_song.title:
+        bg_title = translate_title(scraped_song.title)
         existing_titles = json.loads(study.titles_json or "[]")
-        if scraped_song.title not in existing_titles:
-            existing_titles.append(scraped_song.title)
-            study.titles_json = json.dumps(existing_titles)
+        if bg_title not in existing_titles:
+            existing_titles.append(bg_title)
+            study.titles_json = json.dumps(existing_titles, ensure_ascii=False)
 
     # 3. Extract vocabulary from translations
     if translated_text:
