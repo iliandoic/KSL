@@ -4,6 +4,7 @@ from pydantic_settings import BaseSettings
 class Settings(BaseSettings):
     ANTHROPIC_API_KEY: str = ""
     GENIUS_ACCESS_TOKEN: str = ""
+    SCRAPER_API_KEY: str = ""
     DATABASE_URL: str = "sqlite:///./ksl.db"
     AI_MODEL: str = "claude-sonnet-4-20250514"
 

@@ -1,12 +1,15 @@
 """
 Genius lyrics scraper. Fetches lyrics from a Genius URL.
+Uses ScraperAPI if available to bypass rate limits.
 """
 import re
 import time
 import random
 import requests
+from urllib.parse import urlencode
 
 from bs4 import BeautifulSoup
+from config import settings
 
 # Rotate user agents to avoid detection
 USER_AGENTS = [
@@ -97,14 +100,21 @@ def _normalize_section(header: str) -> str | None:
     return None
 
 
-def scrape_genius(url: str, retry_count: int = 2) -> dict:
-    """
-    Scrape lyrics from a Genius URL.
-    Returns {"title": str, "artist": str, "lyrics": str, "sections": list}
+def _fetch_url(url: str, retry_count: int = 2) -> str:
+    """Fetch URL content, using ScraperAPI if available."""
 
-    sections is a list of {"section": str, "lines": list[str]}
-    """
-    # Small random delay to avoid rate limiting
+    # Use ScraperAPI if key is available
+    if settings.SCRAPER_API_KEY:
+        scraper_url = "http://api.scraperapi.com?" + urlencode({
+            "api_key": settings.SCRAPER_API_KEY,
+            "url": url,
+            "render": "false",
+        })
+        resp = requests.get(scraper_url, timeout=60)
+        resp.raise_for_status()
+        return resp.text
+
+    # Fallback to direct request
     time.sleep(random.uniform(0.5, 1.5))
 
     last_error = None
@@ -112,17 +122,24 @@ def scrape_genius(url: str, retry_count: int = 2) -> dict:
         try:
             resp = _session.get(url, headers=_get_headers(), timeout=20)
             resp.raise_for_status()
-            html = resp.text
-            break
+            return resp.text
         except requests.exceptions.HTTPError as e:
             last_error = e
             if e.response.status_code == 403 and attempt < retry_count:
-                # Wait longer and retry
                 time.sleep(random.uniform(2, 4))
                 continue
             raise
-    else:
-        raise last_error
+    raise last_error
+
+
+def scrape_genius(url: str, retry_count: int = 2) -> dict:
+    """
+    Scrape lyrics from a Genius URL.
+    Returns {"title": str, "artist": str, "lyrics": str, "sections": list}
+
+    sections is a list of {"section": str, "lines": list[str]}
+    """
+    html = _fetch_url(url, retry_count)
 
     soup = BeautifulSoup(html, "html.parser")
 
