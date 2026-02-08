@@ -22,8 +22,5 @@ RUN cd ksl-web && npm run build
 # Copy backend
 COPY . .
 
-# Expose port
-EXPOSE 8000
-
-# Start server
-CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]
+# Start server - Railway provides PORT env var
+CMD uvicorn main:app --host 0.0.0.0 --port ${PORT:-8000}
