@@ -310,36 +310,39 @@ export function SongsPage() {
 
             {/* Lyrics */}
             <div className="space-y-6">
-              {selectedSong.sections.map((section, sIdx) => (
-                <div key={sIdx} className="bg-zinc-800/30 rounded-lg p-4">
-                  <div className="text-xs text-teal-400 font-medium mb-3 uppercase">
-                    [{section.section}]
+              {(() => {
+                let globalLineIdx = 0;
+                return selectedSong.sections.map((section, sIdx) => (
+                  <div key={sIdx} className="bg-zinc-800/30 rounded-lg p-4">
+                    <div className="text-xs text-teal-400 font-medium mb-3 uppercase">
+                      [{section.section}]
+                    </div>
+                    <div className="space-y-2">
+                      {section.lines.map((line, lIdx) => {
+                        const lineKey = `line_${globalLineIdx}`;
+                        globalLineIdx++;
+                        const translation = getTranslation(lineKey);
+                        return (
+                          <div key={lIdx} className="group">
+                            {showTranslation && translation ? (
+                              <>
+                                <div className={`${
+                                  showTranslation === 'sonnet' ? 'text-purple-300' : 'text-amber-300'
+                                }`}>
+                                  {translation}
+                                </div>
+                                <div className="text-xs text-zinc-500 mt-0.5">{line}</div>
+                              </>
+                            ) : (
+                              <div className="text-zinc-200">{line}</div>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
                   </div>
-                  <div className="space-y-2">
-                    {section.lines.map((line, lIdx) => {
-                      const lineKey = `${sIdx}-${lIdx}`;
-                      const translation = getTranslation(lineKey);
-                      return (
-                        <div key={lIdx} className="group">
-                          {showTranslation && translation ? (
-                            <>
-                              <div className={`${
-                                showTranslation === 'sonnet' ? 'text-purple-300' : 'text-amber-300'
-                              }`}>
-                                {translation}
-                              </div>
-                              <div className="text-xs text-zinc-500 mt-0.5">{line}</div>
-                            </>
-                          ) : (
-                            <div className="text-zinc-200">{line}</div>
-                          )}
-                        </div>
-                      );
-                    })}
-                  </div>
-                </div>
-              ))}
-            </div>
+                ));
+              })()}</div>
           </div>
         )}
       </div>
