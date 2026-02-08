@@ -3,11 +3,30 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
-from database.connection import get_db
+from database.connection import get_db, engine
 from database.models import ScrapedSong
 from library.genius_api import get_song_id_from_url, get_song_details
+from sqlalchemy import text
 
 router = APIRouter(prefix="/api/scraped", tags=["scraped"])
+
+
+@router.post("/migrate")
+def run_migration():
+    """Add missing columns to scraped_songs table."""
+    migrations = [
+        "ALTER TABLE scraped_songs ADD COLUMN IF NOT EXISTS primary_artist VARCHAR(200)",
+        "ALTER TABLE scraped_songs ADD COLUMN IF NOT EXISTS primary_artist_image VARCHAR(500)",
+        "ALTER TABLE scraped_songs ADD COLUMN IF NOT EXISTS featured_artists_json TEXT",
+    ]
+    with engine.connect() as conn:
+        for sql in migrations:
+            try:
+                conn.execute(text(sql))
+            except Exception as e:
+                pass  # Column might already exist
+        conn.commit()
+    return {"status": "migrated"}
 
 
 class SaveScrapedRequest(BaseModel):
