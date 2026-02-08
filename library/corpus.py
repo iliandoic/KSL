@@ -30,10 +30,11 @@ def _detect_language(line: str) -> str:
     return "unknown"
 
 
-def _extract_words_to_rhymes(text: str, db: Session) -> int:
+def _extract_words_to_rhymes(text: str, source: str | None, db: Session) -> int:
     """
     Extract individual Cyrillic words from text and add new ones to the rhymes table.
     Only adds words that are Cyrillic, >= MIN_WORD_LENGTH chars, and not already in DB.
+    Stores the source (artist/song) so we know where each word came from.
     Returns count of new words added.
     """
     # Extract all Cyrillic words
@@ -55,6 +56,7 @@ def _extract_words_to_rhymes(text: str, db: Session) -> int:
             syllable_count=syllables,
             theme=theme,
             phonetic_ending=rhyme_group,
+            source=source,
         ))
         added += 1
     return added
@@ -102,7 +104,7 @@ def ingest_lyrics(text: str, source: str | None, db: Session) -> dict:
             themes_detected[theme] = themes_detected.get(theme, 0) + 1
 
     # Extract individual Cyrillic words into the rhymes table
-    words_added = _extract_words_to_rhymes(text, db)
+    words_added = _extract_words_to_rhymes(text, source, db)
 
     db.commit()
     return {"lines_added": added, "themes_detected": themes_detected, "words_added": words_added}
