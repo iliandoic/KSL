@@ -2,200 +2,292 @@ import { useState } from 'react';
 import { api } from '../api';
 import { useStore } from '../store';
 
-type Section = { section: string; lines: string[] };
-
-const SECTION_STYLES: Record<string, { label: string; bg: string; border: string; text: string }> = {
-  hook: { label: 'Hook', bg: 'bg-amber-500/10', border: 'border-l-amber-500', text: 'text-amber-400' },
-  'pre-hook': { label: 'Pre-Hook', bg: 'bg-purple-500/10', border: 'border-l-purple-500', text: 'text-purple-400' },
-  'post-hook': { label: 'Post-Hook', bg: 'bg-pink-500/10', border: 'border-l-pink-500', text: 'text-pink-400' },
-  verse: { label: 'Verse', bg: 'bg-blue-500/10', border: 'border-l-blue-500', text: 'text-blue-400' },
-  bridge: { label: 'Bridge', bg: 'bg-green-500/10', border: 'border-l-green-500', text: 'text-green-400' },
-  intro: { label: 'Intro', bg: 'bg-zinc-500/10', border: 'border-l-zinc-500', text: 'text-zinc-400' },
-  outro: { label: 'Outro', bg: 'bg-zinc-500/10', border: 'border-l-zinc-500', text: 'text-zinc-400' },
-};
-
-function SectionView({ sections }: { sections: Section[] }) {
-  // Deduplicate sections with identical content
-  type DeduplicatedSection = { section: string; lines: string[]; count: number; positions: number[] };
-  const deduped: DeduplicatedSection[] = [];
-  const seenHashes = new Map<string, number>(); // hash -> index in deduped array
-
-  sections.forEach((s, idx) => {
-    // Create a hash from section type + lines content
-    const hash = `${s.section}::${s.lines.join('\n')}`;
-
-    if (seenHashes.has(hash)) {
-      // Already seen this exact section, increment count
-      const existingIdx = seenHashes.get(hash)!;
-      deduped[existingIdx].count++;
-      deduped[existingIdx].positions.push(idx + 1);
-    } else {
-      // New unique section
-      seenHashes.set(hash, deduped.length);
-      deduped.push({ ...s, count: 1, positions: [idx + 1] });
-    }
-  });
-
-  // Count unique sections per type for numbering
-  const typeCounts: Record<string, number> = {};
-  deduped.forEach(s => {
-    typeCounts[s.section] = (typeCounts[s.section] || 0) + 1;
-  });
-
-  // Track current number per type
-  const currentNum: Record<string, number> = {};
-
-  return (
-    <div className="space-y-3 max-h-[400px] overflow-y-auto">
-      {deduped.map((s, idx) => {
-        const style = SECTION_STYLES[s.section] || SECTION_STYLES.verse;
-        currentNum[s.section] = (currentNum[s.section] || 0) + 1;
-
-        // Build label
-        let label = style.label;
-        if (typeCounts[s.section] > 1) {
-          label = `${style.label} ${currentNum[s.section]}`;
-        }
-
-        // Add repeat indicator
-        const repeatBadge = s.count > 1 ? (
-          <span className="ml-2 px-1.5 py-0.5 bg-white/10 rounded text-[10px] font-medium">
-            ×{s.count}
-          </span>
-        ) : null;
-
-        return (
-          <div
-            key={idx}
-            className={`${style.bg} border-l-4 ${style.border} rounded-r-lg overflow-hidden`}
-          >
-            <div className={`px-3 py-1.5 ${style.text} text-xs font-bold uppercase tracking-wide flex items-center`}>
-              {label}
-              {repeatBadge}
-            </div>
-            <div className="px-3 pb-3 space-y-0.5">
-              {s.lines.map((line, lineIdx) => (
-                <div key={lineIdx} className="text-sm text-zinc-200 font-mono">
-                  {line}
-                </div>
-              ))}
-            </div>
-          </div>
-        );
-      })}
-    </div>
-  );
+interface StudyResult {
+  song_id: number;
+  title: string;
+  artist: string;
+  language: string;
+  lines_translated: number;
+  study: {
+    artist: string;
+    title: string;
+    endings_added: number;
+    vocabulary_added: number;
+    concepts_added: number;
+    prompts_added: number;
+  };
 }
 
 export function ImportPage() {
-  const [text, setText] = useState('');
-  const [source, setSource] = useState('');
   const [url, setUrl] = useState('');
+  const [artistQuery, setArtistQuery] = useState('');
+  const [artists, setArtists] = useState<{ id: number; name: string }[]>([]);
+  const [selectedArtist, setSelectedArtist] = useState<{ id: number; name: string } | null>(null);
+  const [artistSongs, setArtistSongs] = useState<{ id: number; title: string; url: string }[]>([]);
+  const [selectedSongIds, setSelectedSongIds] = useState<Set<number>>(new Set());
   const [status, setStatus] = useState('');
-  const [sections, setSections] = useState<Section[]>([]);
-  const [scrapedTitle, setScrapedTitle] = useState('');
-  const [scrapedUrl, setScrapedUrl] = useState('');
-  const [viewMode, setViewMode] = useState<'sections' | 'raw'>('sections');
+  const [results, setResults] = useState<StudyResult[]>([]);
+  const [progress, setProgress] = useState<{ current: number; total: number } | null>(null);
+  const [aiModel, setAiModel] = useState<'sonnet' | 'opus'>('sonnet');
   const { loading, setLoading } = useStore();
+
+  const searchArtists = async () => {
+    if (!artistQuery.trim()) return;
+    setLoading('artist', true);
+    try {
+      const res = await api.geniusSearchArtists(artistQuery.trim());
+      setArtists(res.artists);
+      if (res.artists.length === 1) {
+        selectArtist(res.artists[0]);
+      }
+    } catch (e: unknown) {
+      setStatus(`Error: ${e instanceof Error ? e.message : 'Search failed'}`);
+    } finally {
+      setLoading('artist', false);
+    }
+  };
+
+  const selectArtist = async (artist: { id: number; name: string }) => {
+    setSelectedArtist(artist);
+    setArtists([]);
+    setLoading('songs', true);
+    try {
+      const res = await api.geniusArtistSongs(artist.id, 100);
+      setArtistSongs(res.songs);
+    } catch (e: unknown) {
+      setStatus(`Error: ${e instanceof Error ? e.message : 'Failed to load songs'}`);
+    } finally {
+      setLoading('songs', false);
+    }
+  };
+
+  const toggleSongSelection = (id: number) => {
+    setSelectedSongIds(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) {
+        next.delete(id);
+      } else {
+        next.add(id);
+      }
+      return next;
+    });
+  };
+
+  const selectAllSongs = () => {
+    setSelectedSongIds(new Set(artistSongs.map(s => s.id)));
+  };
+
+  const deselectAllSongs = () => {
+    setSelectedSongIds(new Set());
+  };
+
+  const scrapeAndStudySelected = async () => {
+    const songsToProcess = artistSongs.filter(s => selectedSongIds.has(s.id));
+    if (songsToProcess.length === 0) return;
+
+    setLoading('batch', true);
+    setResults([]);
+    setProgress({ current: 0, total: songsToProcess.length });
+
+    const newResults: StudyResult[] = [];
+    for (let i = 0; i < songsToProcess.length; i++) {
+      const song = songsToProcess[i];
+      setStatus(`Processing ${i + 1}/${songsToProcess.length}: "${song.title}"...`);
+      setProgress({ current: i + 1, total: songsToProcess.length });
+
+      try {
+        const result = await api.scrapeAndStudy(song.url, aiModel);
+        newResults.push(result);
+        setResults([...newResults]);
+      } catch (e) {
+        console.error(`Failed to process ${song.title}:`, e);
+      }
+    }
+
+    setProgress(null);
+    setSelectedSongIds(new Set());
+    setArtistSongs([]);
+    setSelectedArtist(null);
+    setStatus(`Completed! Processed ${newResults.length} songs.`);
+    setLoading('batch', false);
+  };
 
   const scrapeFromUrl = async () => {
     if (!url.trim()) return;
     setLoading('scrape', true);
-    setStatus('');
+    setStatus('Processing...');
+    setResults([]);
+
     try {
-      const res = await api.corpusScrapeUrl(url.trim());
-      setText(res.lyrics);
-      setSource(res.artist);
-      setSections(res.sections);
-      setScrapedTitle(res.title);
-      setScrapedUrl(res.url);
-      setViewMode('sections'); // Switch to section view after scraping
-
-      // Count sections for status
-      const sectionCounts = res.sections.reduce((acc, s) => {
-        acc[s.section] = (acc[s.section] || 0) + s.lines.length;
-        return acc;
-      }, {} as Record<string, number>);
-
-      const sectionSummary = Object.entries(sectionCounts)
-        .map(([s, count]) => `${count} ${SECTION_STYLES[s]?.label || s}`)
-        .join(', ');
-
-      setStatus(`Scraped "${res.title}" by ${res.artist} - ${sectionSummary}`);
+      const result = await api.scrapeAndStudy(url.trim(), aiModel);
+      setResults([result]);
+      setStatus(`Added "${result.title}" by ${result.artist} to your inspiration pool!`);
       setUrl('');
     } catch (e: unknown) {
-      setStatus(`Error: ${e instanceof Error ? e.message : 'Failed to scrape'}`);
-      setSections([]);
-      setScrapedTitle('');
-      setScrapedUrl('');
+      setStatus(`Error: ${e instanceof Error ? e.message : 'Failed to process'}`);
     } finally {
       setLoading('scrape', false);
     }
   };
 
-  const ingest = async () => {
-    if (!text.trim()) return;
-    setLoading('ingest', true);
-    try {
-      const res = await api.corpusIngest(
-        text.trim(),
-        source || undefined,
-        sections.length > 0 ? sections : undefined,
-        scrapedTitle || undefined,
-        scrapedUrl || undefined
-      );
-
-      const sectionSummary = Object.entries(res.sections_found || {})
-        .map(([s, count]) => `${count} ${SECTION_STYLES[s]?.label || s}`)
-        .join(', ');
-
-      setStatus(`Added ${res.lines_added} lines, ${res.words_added} words${sectionSummary ? ` (${sectionSummary})` : ''}`);
-      setText('');
-      setSource('');
-      setSections([]);
-      setScrapedTitle('');
-      setScrapedUrl('');
-    } finally {
-      setLoading('ingest', false);
-    }
-  };
-
-  const importAsStyle = async () => {
-    if (!text.trim()) return;
-    setLoading('ingest', true);
-    try {
-      await api.styleImport(text.trim(), 'reference', source || undefined);
-      setStatus('Imported as style reference');
-      setText('');
-    } finally {
-      setLoading('ingest', false);
-    }
-  };
-
   const clearAll = () => {
-    setText('');
-    setSource('');
     setUrl('');
+    setArtistQuery('');
+    setArtists([]);
+    setSelectedArtist(null);
+    setArtistSongs([]);
+    setSelectedSongIds(new Set());
     setStatus('');
-    setSections([]);
-    setScrapedTitle('');
-    setScrapedUrl('');
+    setResults([]);
+    setProgress(null);
   };
-
-  const hasSections = sections.length > 0;
 
   return (
-    <div className="max-w-4xl mx-auto">
+    <div className="max-w-3xl mx-auto p-4">
       <div className="bg-zinc-900 rounded-xl border border-zinc-800 overflow-hidden">
         <div className="border-b border-zinc-800 px-6 py-4">
-          <h2 className="text-lg font-bold text-amber-400">Import Lyrics</h2>
-          <p className="text-sm text-zinc-500 mt-1">
-            Scrape from Genius or paste lyrics manually to add to your corpus
-          </p>
+          <div className="flex items-center justify-between">
+            <div>
+              <h2 className="text-lg font-bold text-amber-400">Import Songs</h2>
+              <p className="text-sm text-zinc-500 mt-1">
+                Search for an artist or paste a Genius URL to add songs to your inspiration pool
+              </p>
+            </div>
+            <div className="flex items-center gap-2">
+              <span className="text-xs text-zinc-500">Model:</span>
+              <div className="flex gap-1 bg-zinc-800 rounded-lg p-0.5">
+                <button
+                  onClick={() => setAiModel('sonnet')}
+                  className={`px-2 py-1 text-xs font-medium rounded transition-colors ${
+                    aiModel === 'sonnet'
+                      ? 'bg-purple-600 text-white'
+                      : 'text-zinc-500 hover:text-zinc-300'
+                  }`}
+                >
+                  Sonnet
+                </button>
+                <button
+                  onClick={() => setAiModel('opus')}
+                  className={`px-2 py-1 text-xs font-medium rounded transition-colors ${
+                    aiModel === 'opus'
+                      ? 'bg-amber-500 text-black'
+                      : 'text-zinc-500 hover:text-zinc-300'
+                  }`}
+                >
+                  Opus
+                </button>
+              </div>
+            </div>
+          </div>
         </div>
 
         <div className="p-6 space-y-6">
-          {/* Genius URL Section */}
+          {/* Artist Search */}
+          <div>
+            <label className="block text-sm font-medium text-zinc-400 mb-2">
+              Find Artist
+            </label>
+            <div className="flex gap-3">
+              <input
+                value={artistQuery}
+                onChange={(e) => setArtistQuery(e.target.value)}
+                onKeyDown={(e) => e.key === 'Enter' && searchArtists()}
+                placeholder="Search artist name..."
+                className="bg-zinc-800 border border-zinc-700 rounded-lg px-4 py-2.5 text-sm flex-1 focus:border-teal-500 focus:outline-none"
+              />
+              <button
+                onClick={searchArtists}
+                disabled={loading['artist'] || !artistQuery.trim()}
+                className="bg-teal-600 text-white px-6 py-2.5 rounded-lg text-sm font-medium hover:bg-teal-500 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+              >
+                {loading['artist'] ? '...' : 'Search'}
+              </button>
+            </div>
+
+            {/* Artist Results */}
+            {artists.length > 0 && (
+              <div className="mt-3 flex flex-wrap gap-2">
+                {artists.map(a => (
+                  <button
+                    key={a.id}
+                    onClick={() => selectArtist(a)}
+                    className="px-3 py-1.5 bg-zinc-800 border border-zinc-700 rounded-lg text-sm hover:border-teal-500 transition-colors"
+                  >
+                    {a.name}
+                  </button>
+                ))}
+              </div>
+            )}
+
+            {/* Artist Songs */}
+            {selectedArtist && artistSongs.length > 0 && (
+              <div className="mt-4 bg-zinc-800/50 rounded-lg p-4">
+                <div className="flex items-center justify-between mb-3">
+                  <span className="text-sm text-teal-400 font-medium">
+                    {selectedArtist.name} ({artistSongs.length} songs)
+                  </span>
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={selectedSongIds.size === artistSongs.length ? deselectAllSongs : selectAllSongs}
+                      className="px-2 py-1 text-xs text-zinc-400 hover:text-zinc-200"
+                    >
+                      {selectedSongIds.size === artistSongs.length ? 'Deselect All' : 'Select All'}
+                    </button>
+                    <button
+                      onClick={() => { setSelectedArtist(null); setArtistSongs([]); setSelectedSongIds(new Set()); }}
+                      className="text-xs text-zinc-500 hover:text-zinc-300"
+                    >
+                      Clear
+                    </button>
+                  </div>
+                </div>
+
+                <div className="max-h-64 overflow-y-auto space-y-1 mb-4">
+                  {artistSongs.map(song => (
+                    <div
+                      key={song.id}
+                      onClick={() => toggleSongSelection(song.id)}
+                      className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm cursor-pointer transition-colors ${
+                        selectedSongIds.has(song.id)
+                          ? 'bg-teal-500/20 border border-teal-500'
+                          : 'bg-zinc-800 border border-zinc-700 hover:border-zinc-600'
+                      }`}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={selectedSongIds.has(song.id)}
+                        onChange={() => {}}
+                        className="accent-teal-500"
+                      />
+                      <span className="flex-1">{song.title}</span>
+                    </div>
+                  ))}
+                </div>
+
+                {selectedSongIds.size > 0 && (
+                  <button
+                    onClick={scrapeAndStudySelected}
+                    disabled={loading['batch']}
+                    className="w-full py-3 bg-gradient-to-r from-amber-500 to-orange-500 text-black font-bold rounded-lg hover:from-amber-400 hover:to-orange-400 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
+                  >
+                    {loading['batch']
+                      ? `Processing... (${progress?.current}/${progress?.total})`
+                      : `Scrape & Study ${selectedSongIds.size} songs`}
+                  </button>
+                )}
+              </div>
+            )}
+            {loading['songs'] && <div className="mt-3 text-sm text-zinc-500">Loading songs...</div>}
+          </div>
+
+          {/* Divider */}
+          <div className="flex items-center gap-4">
+            <div className="flex-1 h-px bg-zinc-800"></div>
+            <span className="text-zinc-500 text-sm">or</span>
+            <div className="flex-1 h-px bg-zinc-800"></div>
+          </div>
+
+          {/* URL Input */}
           <div>
             <label className="block text-sm font-medium text-zinc-400 mb-2">
               Genius URL
@@ -211,124 +303,32 @@ export function ImportPage() {
               <button
                 onClick={scrapeFromUrl}
                 disabled={loading['scrape'] || !url.trim()}
-                className="bg-purple-600 text-white px-6 py-2.5 rounded-lg text-sm font-medium hover:bg-purple-500 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                className="bg-gradient-to-r from-amber-500 to-orange-500 text-black px-6 py-2.5 rounded-lg text-sm font-bold hover:from-amber-400 hover:to-orange-400 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
               >
-                {loading['scrape'] ? 'Scraping...' : 'Scrape'}
+                {loading['scrape'] ? 'Processing...' : 'Scrape & Study'}
               </button>
             </div>
           </div>
 
-          {/* Artist Name + Song Title */}
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className="block text-sm font-medium text-zinc-400 mb-2">
-                Artist
-              </label>
-              <input
-                value={source}
-                onChange={(e) => setSource(e.target.value)}
-                placeholder="Artist name"
-                className="bg-zinc-800 border border-zinc-700 rounded-lg px-4 py-2.5 text-sm w-full focus:border-amber-500 focus:outline-none"
-              />
-            </div>
-            {scrapedTitle && (
-              <div>
-                <label className="block text-sm font-medium text-zinc-400 mb-2">
-                  Song Title
-                </label>
-                <input
-                  value={scrapedTitle}
-                  onChange={(e) => setScrapedTitle(e.target.value)}
-                  className="bg-zinc-800 border border-zinc-700 rounded-lg px-4 py-2.5 text-sm w-full focus:border-amber-500 focus:outline-none"
-                />
-              </div>
-            )}
-          </div>
-
-          {/* Lyrics Section */}
-          <div>
-            <div className="flex items-center justify-between mb-2">
-              <label className="text-sm font-medium text-zinc-400">
-                Lyrics
-              </label>
-              {hasSections && (
-                <div className="flex gap-1 bg-zinc-800 rounded-lg p-0.5">
-                  <button
-                    onClick={() => setViewMode('sections')}
-                    className={`px-3 py-1 text-xs font-medium rounded-md transition-colors ${
-                      viewMode === 'sections'
-                        ? 'bg-zinc-700 text-zinc-200'
-                        : 'text-zinc-500 hover:text-zinc-300'
-                    }`}
-                  >
-                    Sections
-                  </button>
-                  <button
-                    onClick={() => setViewMode('raw')}
-                    className={`px-3 py-1 text-xs font-medium rounded-md transition-colors ${
-                      viewMode === 'raw'
-                        ? 'bg-zinc-700 text-zinc-200'
-                        : 'text-zinc-500 hover:text-zinc-300'
-                    }`}
-                  >
-                    Raw
-                  </button>
+          {/* Results */}
+          {results.length > 0 && (
+            <div className="space-y-2">
+              <div className="text-sm font-medium text-zinc-400">Results:</div>
+              {results.map((r, i) => (
+                <div key={i} className="bg-zinc-800/50 rounded-lg p-3 text-sm">
+                  <div className="flex items-center justify-between">
+                    <span className="text-white font-medium">{r.artist} - {r.title}</span>
+                    <span className="text-zinc-500 text-xs">{r.language === 'bg' ? 'Bulgarian' : 'Translated'}</span>
+                  </div>
+                  <div className="mt-1 text-zinc-500 text-xs">
+                    +{r.study.vocabulary_added} words, +{r.study.concepts_added} concepts, +{r.study.prompts_added} prompts, +{r.study.endings_added} endings
+                  </div>
                 </div>
-              )}
+              ))}
             </div>
+          )}
 
-            {hasSections && viewMode === 'sections' ? (
-              <div className="bg-zinc-800 border border-zinc-700 rounded-lg p-4">
-                <SectionView sections={sections} />
-              </div>
-            ) : (
-              <textarea
-                value={text}
-                onChange={(e) => {
-                  setText(e.target.value);
-                  // Clear sections and scraped metadata if user manually edits
-                  if (sections.length > 0) {
-                    setSections([]);
-                    setScrapedTitle('');
-                    setScrapedUrl('');
-                  }
-                }}
-                placeholder="Paste or edit lyrics here..."
-                rows={12}
-                className="bg-zinc-800 border border-zinc-700 rounded-lg px-4 py-3 text-sm w-full resize-none focus:border-amber-500 focus:outline-none font-mono"
-              />
-            )}
-            <div className="flex justify-between mt-2 text-xs text-zinc-500">
-              <span>{text.split('\n').filter(l => l.trim()).length} lines</span>
-              <span>{text.length} characters</span>
-            </div>
-          </div>
-
-          {/* Action Buttons */}
-          <div className="flex gap-3">
-            <button
-              onClick={ingest}
-              disabled={loading['ingest'] || !text.trim()}
-              className="bg-amber-500 text-black px-6 py-2.5 rounded-lg text-sm font-bold hover:bg-amber-400 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex-1"
-            >
-              {loading['ingest'] ? 'Adding...' : 'Add to Corpus'}
-            </button>
-            <button
-              onClick={importAsStyle}
-              disabled={loading['ingest'] || !text.trim()}
-              className="bg-zinc-700 text-zinc-200 px-6 py-2.5 rounded-lg text-sm font-medium hover:bg-zinc-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex-1"
-            >
-              Import as Style
-            </button>
-            <button
-              onClick={clearAll}
-              className="bg-zinc-800 text-zinc-400 px-4 py-2.5 rounded-lg text-sm font-medium hover:bg-zinc-700 hover:text-zinc-200 transition-colors"
-            >
-              Clear
-            </button>
-          </div>
-
-          {/* Status Message */}
+          {/* Status */}
           {status && (
             <div className={`text-sm px-4 py-3 rounded-lg ${
               status.startsWith('Error')
@@ -337,6 +337,16 @@ export function ImportPage() {
             }`}>
               {status}
             </div>
+          )}
+
+          {/* Clear Button */}
+          {(results.length > 0 || status) && (
+            <button
+              onClick={clearAll}
+              className="w-full py-2 bg-zinc-800 text-zinc-400 rounded-lg text-sm font-medium hover:bg-zinc-700 hover:text-zinc-200 transition-colors"
+            >
+              Clear
+            </button>
           )}
         </div>
       </div>

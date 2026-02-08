@@ -1,21 +1,14 @@
-import { SparkPanel } from './components/SparkPanel';
-import { Editor } from './components/Editor';
-import { Sidebar } from './components/Sidebar';
 import { NavSidebar } from './components/NavSidebar';
+import { FreestylePage } from './components/FreestylePage';
 import { ImportPage } from './components/ImportPage';
+import { StudyPage } from './components/StudyPage';
 import { useStore } from './store';
 
-function StudioPage() {
-  return (
-    <main className="flex-1 max-w-7xl mx-auto p-4 grid grid-cols-1 lg:grid-cols-[1fr_320px] gap-4">
-      <div className="space-y-4">
-        <SparkPanel />
-        <Editor />
-      </div>
-      <Sidebar />
-    </main>
-  );
-}
+const PAGE_TITLES: Record<string, string> = {
+  freestyle: 'Freestyle',
+  import: 'Import',
+  study: 'Study',
+};
 
 function App() {
   const { currentPage } = useStore();
@@ -28,14 +21,15 @@ function App() {
           <h1 className="text-xl font-bold">
             <span className="text-amber-400">KSL</span>
             <span className="text-zinc-500 text-sm ml-2 font-normal">
-              {currentPage === 'studio' ? 'Lyrics Studio' : 'Import Lyrics'}
+              {PAGE_TITLES[currentPage] || 'Freestyle'}
             </span>
           </h1>
         </header>
 
-        <div className="flex-1 p-4">
-          {currentPage === 'studio' && <StudioPage />}
+        <div className="flex-1 overflow-y-auto">
+          {currentPage === 'freestyle' && <FreestylePage />}
           {currentPage === 'import' && <ImportPage />}
+          {currentPage === 'study' && <StudyPage />}
         </div>
       </div>
     </div>

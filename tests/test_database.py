@@ -6,7 +6,7 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
 from database.connection import Base
-from database.models import Rhyme, CorpusLine, UserLyric, StylePattern, Song
+from database.models import RhymeableWord, CorpusLine, UserLyric, StylePattern, Song
 
 
 def get_test_session():
@@ -20,19 +20,19 @@ def test_create_tables():
     engine = create_engine("sqlite:///:memory:")
     Base.metadata.create_all(engine)
     table_names = list(Base.metadata.tables.keys())
-    assert "rhymes" in table_names
+    assert "rhymeable_words" in table_names
     assert "corpus_lines" in table_names
     assert "user_lyrics" in table_names
     assert "style_patterns" in table_names
     assert "songs" in table_names
 
 
-def test_rhyme_model():
+def test_rhymeable_word_model():
     db = get_test_session()
-    r = Rhyme(word="любов", phonetic_ending="оф", rhyme_group="O:ф", syllable_count=2, theme="love")
+    r = RhymeableWord(word="любов", phonetic_ending="оф", rhyme_group="O:ф", syllable_count=2, theme="love")
     db.add(r)
     db.commit()
-    result = db.query(Rhyme).filter_by(word="любов").first()
+    result = db.query(RhymeableWord).filter_by(word="любов").first()
     assert result is not None
     assert result.rhyme_group == "O:ф"
     assert result.syllable_count == 2

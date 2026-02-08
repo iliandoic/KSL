@@ -10,7 +10,7 @@ import re
 from sqlalchemy.orm import Session
 from sqlalchemy import func
 
-from database.models import CorpusLine, Rhyme, ImportedSong
+from database.models import CorpusLine, RhymeableWord, ImportedSong
 from engines.syllable import count_syllables, count_word_syllables
 from engines.rhyme import compute_rhyme_group
 from library.themes import detect_theme
@@ -46,12 +46,12 @@ def _extract_words_to_rhymes(text: str, source: str | None, db: Session) -> int:
     added = 0
     for word in unique_words:
         # Skip if already in DB
-        if db.query(Rhyme).filter_by(word=word).first():
+        if db.query(RhymeableWord).filter_by(word=word).first():
             continue
         rhyme_group = compute_rhyme_group(word)
         syllables = count_word_syllables(word)
         theme = detect_theme(word)
-        db.add(Rhyme(
+        db.add(RhymeableWord(
             word=word,
             rhyme_group=rhyme_group,
             syllable_count=syllables,

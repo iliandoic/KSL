@@ -1,10 +1,16 @@
+import json
+import re
+
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from database.connection import get_db
+from database.models import ScrapedSong
 from library.corpus import ingest_lyrics, search_lines, get_corpus_stats, get_imported_songs
 from library.scraper import scrape_genius
+from library.study import study_song
+from engines.ai import translate_lines
 
 router = APIRouter(prefix="/api/corpus", tags=["corpus"])
 
@@ -111,3 +117,125 @@ def stats(db: Session = Depends(get_db)):
 def songs(limit: int = 50, db: Session = Depends(get_db)):
     """Get list of imported songs with their structure info."""
     return {"songs": get_imported_songs(db, limit)}
+
+
+class TranslateRequest(BaseModel):
+    lines: list[str]
+    target_lang: str = "en"  # "en" or "bg"
+    model: str = "sonnet"  # "sonnet" or "opus"
+
+
+@router.post("/translate")
+def translate(req: TranslateRequest):
+    """Translate lines to target language using Claude."""
+    if not req.lines:
+        return {"translations": []}
+
+    try:
+        translations = translate_lines(req.lines, req.target_lang, req.model)
+        return {"translations": translations}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Translation failed: {e}")
+
+
+class ScrapeAndStudyRequest(BaseModel):
+    url: str
+    model: str = "sonnet"  # Translation model
+
+
+def _detect_language(text: str) -> str:
+    """Detect if text is primarily Cyrillic (Bulgarian) or Latin."""
+    cyrillic = len(re.findall(r'[\u0400-\u04FF]', text))
+    latin = len(re.findall(r'[a-zA-Z]', text))
+    return "bg" if cyrillic > latin else "other"
+
+
+def _extract_all_lines(sections: list) -> list[str]:
+    """Extract all lines from sections structure."""
+    lines = []
+    for section in sections:
+        lines.extend(section.get("lines", []))
+    return lines
+
+
+@router.post("/scrape-and-study")
+def scrape_and_study(req: ScrapeAndStudyRequest, db: Session = Depends(get_db)):
+    """
+    Atomic operation: Scrape + Translate + Save + Study.
+    This is the main entry point for adding songs to the inspiration pool.
+    """
+    # 1. Scrape lyrics
+    try:
+        scraped = scrape_genius(req.url)
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"Failed to scrape: {e}")
+
+    if not scraped["lyrics"]:
+        raise HTTPException(status_code=400, detail="No lyrics found at URL")
+
+    title = scraped["title"]
+    artist = scraped["artist"]
+    original_text = scraped["lyrics"]
+    sections = scraped["sections"]
+
+    # 2. Detect language and translate if needed
+    language = _detect_language(original_text)
+    translations = {}
+
+    if language == "bg":
+        # Bulgarian - use original as translation
+        all_lines = _extract_all_lines(sections)
+        for i, line in enumerate(all_lines):
+            translations[f"line_{i}"] = line
+    else:
+        # Foreign - translate to Bulgarian
+        all_lines = _extract_all_lines(sections)
+        if all_lines:
+            try:
+                translated = translate_lines(all_lines, "bg", req.model)
+                for i, line in enumerate(translated):
+                    translations[f"line_{i}"] = line
+            except Exception as e:
+                # Continue without translation on error
+                pass
+
+    # 3. Save to ScrapedSong (upsert by URL)
+    existing = db.query(ScrapedSong).filter_by(url=req.url).first()
+    if existing:
+        song = existing
+        song.title = title
+        song.artist = artist
+        song.original_text = original_text
+        song.sections_json = json.dumps(sections, ensure_ascii=False)
+        if req.model == "sonnet":
+            song.sonnet_translations_json = json.dumps(translations, ensure_ascii=False)
+        else:
+            song.opus_translations_json = json.dumps(translations, ensure_ascii=False)
+    else:
+        song = ScrapedSong(
+            title=title,
+            artist=artist,
+            url=req.url,
+            original_text=original_text,
+            sections_json=json.dumps(sections, ensure_ascii=False),
+        )
+        if req.model == "sonnet":
+            song.sonnet_translations_json = json.dumps(translations, ensure_ascii=False)
+        else:
+            song.opus_translations_json = json.dumps(translations, ensure_ascii=False)
+        db.add(song)
+
+    db.commit()
+    db.refresh(song)
+
+    # 4. Study the artist
+    study_result = study_song(song, db)
+
+    return {
+        "song_id": song.id,
+        "title": title,
+        "artist": artist,
+        "language": language,
+        "lines_translated": len(translations),
+        "study": study_result,
+    }

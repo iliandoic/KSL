@@ -6,7 +6,7 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
 from database.connection import Base
-from database.models import Rhyme
+from database.models import RhymeableWord
 from engines.rhyme import extract_phonetic_ending, find_rhymes, compute_rhyme_group
 
 
@@ -76,11 +76,11 @@ def test_find_rhymes_with_db():
     """find_rhymes should return categorized results."""
     db = get_test_db()
     words = [
-        Rhyme(word="пари", rhyme_group=compute_rhyme_group("пари")),
-        Rhyme(word="вари", rhyme_group=compute_rhyme_group("вари")),
-        Rhyme(word="стари", rhyme_group=compute_rhyme_group("стари")),
-        Rhyme(word="цари", rhyme_group=compute_rhyme_group("цари")),
-        Rhyme(word="море", rhyme_group=compute_rhyme_group("море")),
+        RhymeableWord(word="пари", rhyme_group=compute_rhyme_group("пари")),
+        RhymeableWord(word="вари", rhyme_group=compute_rhyme_group("вари")),
+        RhymeableWord(word="стари", rhyme_group=compute_rhyme_group("стари")),
+        RhymeableWord(word="цари", rhyme_group=compute_rhyme_group("цари")),
+        RhymeableWord(word="море", rhyme_group=compute_rhyme_group("море")),
     ]
     db.add_all(words)
     db.commit()
@@ -100,10 +100,10 @@ def test_find_rhymes_no_false_positives():
     """баница should NOT perfectly rhyme with банка or сметка."""
     db = get_test_db()
     words = [
-        Rhyme(word="улица", rhyme_group=compute_rhyme_group("улица")),
-        Rhyme(word="банка", rhyme_group=compute_rhyme_group("банка")),
-        Rhyme(word="сметка", rhyme_group=compute_rhyme_group("сметка")),
-        Rhyme(word="столица", rhyme_group=compute_rhyme_group("столица")),
+        RhymeableWord(word="улица", rhyme_group=compute_rhyme_group("улица")),
+        RhymeableWord(word="банка", rhyme_group=compute_rhyme_group("банка")),
+        RhymeableWord(word="сметка", rhyme_group=compute_rhyme_group("сметка")),
+        RhymeableWord(word="столица", rhyme_group=compute_rhyme_group("столица")),
     ]
     db.add_all(words)
     db.commit()

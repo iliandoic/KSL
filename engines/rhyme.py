@@ -1,7 +1,7 @@
 import re
 from sqlalchemy.orm import Session
 
-from database.models import Rhyme
+from database.models import RhymeableWord
 
 # Word-final devoicing map (Bulgarian phonetics)
 DEVOICING = {
@@ -130,8 +130,8 @@ def find_rhymes(word: str, db: Session, limit: int = 20) -> dict:
     near = []
     slant = []
 
-    # Query all rhymes from DB
-    all_rhymes = db.query(Rhyme).all()
+    # Query all rhymeable words from DB
+    all_rhymes = db.query(RhymeableWord).all()
 
     for r in all_rhymes:
         if _clean_word(r.word) == clean_input:

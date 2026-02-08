@@ -8,7 +8,7 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
 from database.connection import Base
-from database.models import Rhyme
+from database.models import RhymeableWord
 from engines.spark import generate_titles, generate_opening_lines, random_spark, word_explosion
 from engines.rhyme import compute_rhyme_group
 
@@ -21,7 +21,7 @@ def get_test_db():
     # Add some test rhymes
     words = [("нощ", "party"), ("мощ", "flex"), ("помощ", "loyalty")]
     for word, theme in words:
-        db.add(Rhyme(word=word, rhyme_group=compute_rhyme_group(word), theme=theme))
+        db.add(RhymeableWord(word=word, rhyme_group=compute_rhyme_group(word), theme=theme))
     db.commit()
     return db
 

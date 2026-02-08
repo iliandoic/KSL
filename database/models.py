@@ -5,8 +5,9 @@ from sqlalchemy import Column, Integer, String, Text, Float, DateTime, Index
 from database.connection import Base
 
 
-class Rhyme(Base):
-    __tablename__ = "rhymes"
+class RhymeableWord(Base):
+    """Bulgarian words extracted from lyrics, with phonetic data for rhyme matching."""
+    __tablename__ = "rhymeable_words"
 
     id = Column(Integer, primary_key=True)
     word = Column(String(100), nullable=False, unique=True)
@@ -15,6 +16,34 @@ class Rhyme(Base):
     syllable_count = Column(Integer)
     theme = Column(String(50))
     source = Column(String(200))  # artist/song where this word was first seen
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+
+class ArtistStudy(Base):
+    """Aggregated study data for an artist across all their songs."""
+    __tablename__ = "artist_studies"
+
+    id = Column(Integer, primary_key=True)
+    artist = Column(String(200), unique=True, index=True)
+    songs_studied = Column(Integer, default=0)
+    vocabulary_json = Column(Text)  # JSON: {"пари": 15, "любов": 12, ...}
+    concepts_json = Column(Text)  # JSON: ["proving haters wrong", "self-made success", ...]
+    prompts_json = Column(Text)  # JSON: ["Who doubted you?", "What's your comeback?", ...]
+    titles_json = Column(Text)  # JSON: ["Money Talks", "Trust Nobody", ...]
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+
+class ArtistRhymeGroup(Base):
+    """Rhyme endings grouped by sound for an artist."""
+    __tablename__ = "artist_rhyme_groups"
+
+    id = Column(Integer, primary_key=True)
+    artist = Column(String(200), index=True)
+    group_name = Column(String(50))  # AI-assigned: "EE", "OT", "ATE"
+    endings_json = Column(Text)  # JSON: ["-eri", "-elly", "-eady"] - original spellings kept
+    example_words_json = Column(Text)  # JSON: {"-eri": ["feri", "peri"], "-elly": ["belly"]}
+    frequency = Column(Integer, default=0)  # total occurrences
     created_at = Column(DateTime, default=datetime.utcnow)
 
 
@@ -84,5 +113,21 @@ class Song(Base):
     lines = Column(Text)  # JSON array of lines
     theme = Column(String(50))
     status = Column(String(20), default="draft")
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+
+class ScrapedSong(Base):
+    """Store scraped songs with translations for iteration."""
+    __tablename__ = "scraped_songs"
+
+    id = Column(Integer, primary_key=True)
+    title = Column(String(200))
+    artist = Column(String(200))
+    url = Column(String(500))
+    original_text = Column(Text)  # Raw scraped lyrics
+    sections_json = Column(Text)  # JSON: [{section: str, lines: [str]}]
+    sonnet_translations_json = Column(Text)  # JSON: {lineKey: translation}
+    opus_translations_json = Column(Text)  # JSON: {lineKey: translation}
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)

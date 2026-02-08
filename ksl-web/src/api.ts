@@ -71,6 +71,9 @@ export const api = {
       }[];
     }>(`/corpus/songs?limit=${limit}`),
 
+  translate: (lines: string[], targetLang: string = 'en', model: 'sonnet' | 'opus' = 'sonnet') =>
+    post<{ translations: string[] }>('/corpus/translate', { lines, target_lang: targetLang, model }),
+
   sparkTitles: (theme?: string) =>
     post<{ titles: string[] }>('/spark/titles', { theme }),
 
@@ -90,4 +93,128 @@ export const api = {
 
   styleImport: (text: string, mode: string, source?: string) =>
     post<{ status: string; details: Record<string, unknown> }>('/style/import', { text, mode, source }),
+
+  // Scraped songs
+  scrapedSave: (data: {
+    title: string;
+    artist: string;
+    url: string;
+    original_text: string;
+    sections: { section: string; lines: string[] }[];
+    sonnet_translations: Record<string, string>;
+    opus_translations: Record<string, string>;
+  }) => post<{ id: number; status: string }>('/scraped/save', data),
+
+  scrapedList: () =>
+    get<{
+      songs: {
+        id: number;
+        title: string;
+        artist: string;
+        url: string;
+        has_sonnet: boolean;
+        has_opus: boolean;
+        created_at: string;
+        updated_at: string;
+      }[];
+    }>('/scraped/list'),
+
+  scrapedGet: (id: number) =>
+    get<{
+      id: number;
+      title: string;
+      artist: string;
+      url: string;
+      original_text: string;
+      sections: { section: string; lines: string[] }[];
+      sonnet_translations: Record<string, string>;
+      opus_translations: Record<string, string>;
+      created_at: string;
+      updated_at: string;
+    }>(`/scraped/${id}`),
+
+  scrapedDelete: (id: number) =>
+    fetch(`${BASE}/scraped/${id}`, { method: 'DELETE' }).then(r => r.json()),
+
+  // Genius API
+  geniusSearchArtists: (q: string) =>
+    get<{ artists: { id: number; name: string; image_url: string }[] }>(`/genius/search/artists?q=${encodeURIComponent(q)}`),
+
+  geniusArtistSongs: (artistId: number, limit = 50) =>
+    get<{
+      songs: {
+        id: number;
+        title: string;
+        url: string;
+        primary_artist: string;
+        release_date: string;
+      }[];
+    }>(`/genius/artists/${artistId}/songs?limit=${limit}`),
+
+  // Atomic scrape + translate + save + study
+  scrapeAndStudy: (url: string, model: 'sonnet' | 'opus' = 'sonnet') =>
+    post<{
+      song_id: number;
+      title: string;
+      artist: string;
+      language: string;
+      lines_translated: number;
+      study: {
+        artist: string;
+        title: string;
+        endings_added: number;
+        vocabulary_added: number;
+        concepts_added: number;
+        prompts_added: number;
+      };
+    }>('/corpus/scrape-and-study', { url, model }),
+
+  // Study API
+  studyArtists: () =>
+    get<{ artists: { artist: string; songs_studied: number }[] }>('/study/artists'),
+
+  studyArtist: (artist: string) =>
+    get<{
+      artist: string;
+      songs_studied: number;
+      vocabulary: Record<string, number>;
+      concepts: string[];
+      prompts: string[];
+      titles: string[];
+      rhyme_groups: {
+        group_name: string;
+        endings: string[];
+        example_words: Record<string, string[]>;
+        frequency: number;
+      }[];
+    }>(`/study/${encodeURIComponent(artist)}`),
+
+  studyLearn: (scrapedSongId: number) =>
+    post<{
+      artist: string;
+      title: string;
+      endings_added: number;
+      vocabulary_added: number;
+      concepts_added: number;
+      prompts_added: number;
+    }>('/study/learn', { scraped_song_id: scrapedSongId }),
+
+  // Freestyle API
+  freestyleSpark: () =>
+    get<{ type: string; value: string; group?: string }>('/freestyle/spark'),
+
+  freestyleConcepts: () =>
+    get<{ concepts: string[] }>('/freestyle/concepts'),
+
+  freestylePrompts: () =>
+    get<{ prompts: string[] }>('/freestyle/prompts'),
+
+  freestyleTitles: () =>
+    get<{ titles: string[] }>('/freestyle/titles'),
+
+  freestyleVocabulary: (limit = 50) =>
+    get<{ words: { word: string; count: number }[] }>(`/freestyle/vocabulary?limit=${limit}`),
+
+  freestyleEndings: () =>
+    get<{ groups: { group_name: string; endings: string[]; frequency: number }[] }>('/freestyle/endings'),
 };

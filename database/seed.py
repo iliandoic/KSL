@@ -9,7 +9,7 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
 from database.connection import Base, engine
-from database.models import Rhyme
+from database.models import RhymeableWord
 from database.seed_rhymes import get_all_seed_words
 from engines.rhyme import compute_rhyme_group
 from engines.syllable import count_word_syllables
@@ -22,7 +22,7 @@ def seed_rhymes(db_session):
     skipped = 0
 
     for word, theme in words:
-        existing = db_session.query(Rhyme).filter_by(word=word).first()
+        existing = db_session.query(RhymeableWord).filter_by(word=word).first()
         if existing:
             skipped += 1
             continue
@@ -30,7 +30,7 @@ def seed_rhymes(db_session):
         rhyme_group = compute_rhyme_group(word)
         syllable_count = count_word_syllables(word)
 
-        rhyme = Rhyme(
+        rhyme = RhymeableWord(
             word=word,
             rhyme_group=rhyme_group,
             syllable_count=syllable_count,
@@ -53,12 +53,12 @@ def main():
 
     try:
         added, skipped = seed_rhymes(db)
-        total = db.query(Rhyme).count()
+        total = db.query(RhymeableWord).count()
         print(f"Seed complete: {added} added, {skipped} skipped, {total} total rhymes in DB")
 
         # Verify all rows have rhyme_group
-        empty_groups = db.query(Rhyme).filter(
-            (Rhyme.rhyme_group == None) | (Rhyme.rhyme_group == "")
+        empty_groups = db.query(RhymeableWord).filter(
+            (RhymeableWord.rhyme_group == None) | (RhymeableWord.rhyme_group == "")
         ).count()
         print(f"Rows with empty rhyme_group: {empty_groups}")
     finally:

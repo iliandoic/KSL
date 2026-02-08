@@ -46,19 +46,37 @@ def _has_cyrillic(text: str) -> bool:
     return bool(re.search(r"[\u0400-\u04FF]", text))
 
 
-def _parse_numbered_lines(text: str) -> list[str]:
-    """Parse numbered list format like '1. ...\n2. ...\n3. ...'."""
-    lines = []
-    for line in text.strip().split("\n"):
-        line = line.strip()
-        if not line:
-            continue
-        # Remove numbering prefix like "1. ", "2) ", "- "
-        cleaned = re.sub(r"^\d+[\.\)]\s*", "", line)
-        cleaned = re.sub(r"^[-•]\s*", "", cleaned)
-        if cleaned:
-            lines.append(cleaned)
-    return lines
+def _parse_numbered_lines(text: str, expected_count: int = 0) -> list[str]:
+    """Parse numbered list format like '1. ...\n2. ...\n3. ...'.
+    If expected_count > 0, returns list of that size with items in correct positions.
+    """
+    if expected_count > 0:
+        # Parse by line number to handle out-of-order responses
+        result = [""] * expected_count
+        for line in text.strip().split("\n"):
+            line = line.strip()
+            if not line:
+                continue
+            # Match "1. text" or "1) text"
+            match = re.match(r"^(\d+)[\.\)]\s*(.+)$", line)
+            if match:
+                num = int(match.group(1)) - 1  # 0-indexed
+                content = match.group(2).strip()
+                if 0 <= num < expected_count:
+                    result[num] = content
+        return result
+    else:
+        # Original behavior for backwards compatibility
+        lines = []
+        for line in text.strip().split("\n"):
+            line = line.strip()
+            if not line:
+                continue
+            cleaned = re.sub(r"^\d+[\.\)]\s*", "", line)
+            cleaned = re.sub(r"^[-•]\s*", "", cleaned)
+            if cleaned:
+                lines.append(cleaned)
+        return lines
 
 
 def complete_lines(
@@ -122,3 +140,155 @@ def generate_with_prompt(
         messages=[{"role": "user", "content": user_prompt}],
     )
     return response.content[0].text
+
+
+def group_rhyme_endings(endings: list[str]) -> dict[str, list[str]]:
+    """
+    Group rhyme endings by sound using AI.
+    Returns dict like {"EE": ["-eri", "-elly", "-eady"], "OT": ["-ot", "-ote"]}.
+    Original spellings are preserved.
+    """
+    if not endings:
+        return {}
+
+    client = _get_client()
+
+    system = """You are a phonetics expert. Group these word endings by rhyme sound.
+Return ONLY valid JSON with group names as keys and arrays of endings as values.
+Keep the original spelling of each ending exactly as provided.
+Group names should be simple phonetic labels like "EE", "OT", "AY", "ATE", etc."""
+
+    user_prompt = f"""Group these endings by rhyme sound:
+{', '.join(endings)}
+
+Return JSON only, example format:
+{{"EE": ["-eri", "-elly"], "OT": ["-ot", "-ote"]}}"""
+
+    response = client.messages.create(
+        model=settings.AI_MODEL,
+        max_tokens=500,
+        system=system,
+        messages=[{"role": "user", "content": user_prompt}],
+    )
+
+    result_text = response.content[0].text.strip()
+
+    # Parse JSON from response
+    import json
+    try:
+        # Try to extract JSON from response
+        json_match = re.search(r'\{[^{}]*\}', result_text, re.DOTALL)
+        if json_match:
+            return json.loads(json_match.group())
+        return json.loads(result_text)
+    except json.JSONDecodeError:
+        # Fallback: put all endings in one group
+        return {"OTHER": endings}
+
+
+def extract_concepts(lyrics: str) -> list[str]:
+    """
+    Extract 3-5 high-level concepts from translated lyrics.
+    Returns actionable themes like "proving haters wrong", not single words.
+    """
+    if not lyrics or not lyrics.strip():
+        return []
+
+    client = _get_client()
+
+    system = """Extract the main concepts/themes from these song lyrics.
+Return 3-5 actionable concepts, not single words.
+Good examples: "proving haters wrong", "self-made success", "revenge on the ex", "luxury lifestyle"
+Bad examples: "love", "money", "success" (too generic)
+Return ONLY a JSON array of strings."""
+
+    response = client.messages.create(
+        model=settings.AI_MODEL,
+        max_tokens=300,
+        system=system,
+        messages=[{"role": "user", "content": f"Extract concepts from:\n\n{lyrics}"}],
+    )
+
+    result_text = response.content[0].text.strip()
+
+    import json
+    try:
+        # Try to extract JSON array from response
+        json_match = re.search(r'\[.*\]', result_text, re.DOTALL)
+        if json_match:
+            return json.loads(json_match.group())
+        return json.loads(result_text)
+    except json.JSONDecodeError:
+        return []
+
+
+def generate_prompts(concepts: list[str]) -> list[str]:
+    """
+    Turn concepts into freestyle questions/prompts.
+    Example: "proving haters wrong" -> "Who doubted you?"
+    """
+    if not concepts:
+        return []
+
+    client = _get_client()
+
+    system = """Turn these concepts into freestyle questions that a rapper can answer.
+Make them personal, direct, and inspiring.
+Good examples: "Who doubted you?", "What would you do with a million?", "What's your revenge fantasy?"
+Return ONLY a JSON array of strings."""
+
+    response = client.messages.create(
+        model=settings.AI_MODEL,
+        max_tokens=300,
+        system=system,
+        messages=[{"role": "user", "content": f"Turn these concepts into questions:\n{concepts}"}],
+    )
+
+    result_text = response.content[0].text.strip()
+
+    import json
+    try:
+        json_match = re.search(r'\[.*\]', result_text, re.DOTALL)
+        if json_match:
+            return json.loads(json_match.group())
+        return json.loads(result_text)
+    except json.JSONDecodeError:
+        return []
+
+
+def translate_lines(lines: list[str], target_lang: str = "en", model: str = "sonnet") -> list[str]:
+    """
+    Translate lines using Claude with prefill trick.
+    """
+    if not lines:
+        return []
+
+    client = _get_client()
+
+    if target_lang == "bg":
+        lang_instruction = "Bulgarian (use Cyrillic script)"
+    else:
+        lang_instruction = "English"
+
+    system = """Expert translator for song lyrics. Preserve:
+- Slang and street language feel
+- Emotional tone and attitude
+- Rhyme patterns when possible
+Output only numbered translations, nothing else."""
+
+    model_id = "claude-opus-4-5-20251101" if model == "opus" else "claude-sonnet-4-20250514"
+
+    response = client.messages.create(
+        model=model_id,
+        max_tokens=1000,
+        system=system,
+        messages=[
+            {"role": "user", "content": f"Translate to {lang_instruction}:\n" + "\n".join(f"{i+1}. {l}" for i, l in enumerate(lines))},
+            {"role": "assistant", "content": "1."}
+        ],
+    )
+
+    result_text = "1." + response.content[0].text
+    translations = _parse_numbered_lines(result_text, expected_count=len(lines))
+
+    return translations

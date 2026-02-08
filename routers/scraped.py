@@ -1,0 +1,129 @@
+import json
+from fastapi import APIRouter, Depends, HTTPException
+from pydantic import BaseModel
+from sqlalchemy.orm import Session
+
+from database.connection import get_db
+from database.models import ScrapedSong
+
+router = APIRouter(prefix="/api/scraped", tags=["scraped"])
+
+
+class SaveScrapedRequest(BaseModel):
+    title: str
+    artist: str
+    url: str
+    original_text: str
+    sections: list
+    sonnet_translations: dict
+    opus_translations: dict
+
+
+class UpdateTranslationsRequest(BaseModel):
+    sonnet_translations: dict | None = None
+    opus_translations: dict | None = None
+
+
+@router.post("/save")
+def save_scraped(req: SaveScrapedRequest, db: Session = Depends(get_db)):
+    """Save a scraped song with its translations."""
+    # Check if URL already exists
+    existing = db.query(ScrapedSong).filter(ScrapedSong.url == req.url).first()
+
+    if existing:
+        # Update existing
+        existing.title = req.title
+        existing.artist = req.artist
+        existing.original_text = req.original_text
+        existing.sections_json = json.dumps(req.sections)
+        if req.sonnet_translations:
+            existing.sonnet_translations_json = json.dumps(req.sonnet_translations)
+        if req.opus_translations:
+            existing.opus_translations_json = json.dumps(req.opus_translations)
+        db.commit()
+        return {"id": existing.id, "status": "updated"}
+    else:
+        # Create new
+        song = ScrapedSong(
+            title=req.title,
+            artist=req.artist,
+            url=req.url,
+            original_text=req.original_text,
+            sections_json=json.dumps(req.sections),
+            sonnet_translations_json=json.dumps(req.sonnet_translations) if req.sonnet_translations else None,
+            opus_translations_json=json.dumps(req.opus_translations) if req.opus_translations else None,
+        )
+        db.add(song)
+        db.commit()
+        db.refresh(song)
+        return {"id": song.id, "status": "created"}
+
+
+@router.get("/list")
+def list_scraped(limit: int = 50, db: Session = Depends(get_db)):
+    """List all scraped songs."""
+    songs = db.query(ScrapedSong).order_by(ScrapedSong.updated_at.desc()).limit(limit).all()
+    return {
+        "songs": [
+            {
+                "id": s.id,
+                "title": s.title,
+                "artist": s.artist,
+                "url": s.url,
+                "has_sonnet": s.sonnet_translations_json is not None,
+                "has_opus": s.opus_translations_json is not None,
+                "created_at": s.created_at.isoformat() if s.created_at else None,
+                "updated_at": s.updated_at.isoformat() if s.updated_at else None,
+            }
+            for s in songs
+        ]
+    }
+
+
+@router.get("/{song_id}")
+def get_scraped(song_id: int, db: Session = Depends(get_db)):
+    """Get a scraped song with all its data."""
+    song = db.query(ScrapedSong).filter(ScrapedSong.id == song_id).first()
+    if not song:
+        raise HTTPException(status_code=404, detail="Song not found")
+
+    return {
+        "id": song.id,
+        "title": song.title,
+        "artist": song.artist,
+        "url": song.url,
+        "original_text": song.original_text,
+        "sections": json.loads(song.sections_json) if song.sections_json else [],
+        "sonnet_translations": json.loads(song.sonnet_translations_json) if song.sonnet_translations_json else {},
+        "opus_translations": json.loads(song.opus_translations_json) if song.opus_translations_json else {},
+        "created_at": song.created_at.isoformat() if song.created_at else None,
+        "updated_at": song.updated_at.isoformat() if song.updated_at else None,
+    }
+
+
+@router.patch("/{song_id}/translations")
+def update_translations(song_id: int, req: UpdateTranslationsRequest, db: Session = Depends(get_db)):
+    """Update translations for a scraped song."""
+    song = db.query(ScrapedSong).filter(ScrapedSong.id == song_id).first()
+    if not song:
+        raise HTTPException(status_code=404, detail="Song not found")
+
+    if req.sonnet_translations is not None:
+        song.sonnet_translations_json = json.dumps(req.sonnet_translations)
+    if req.opus_translations is not None:
+        song.opus_translations_json = json.dumps(req.opus_translations)
+
+    db.commit()
+    return {"status": "updated"}
+
+
+@router.delete("/{song_id}")
+def delete_scraped(song_id: int, db: Session = Depends(get_db)):
+    """Delete a scraped song."""
+    song = db.query(ScrapedSong).filter(ScrapedSong.id == song_id).first()
+    if not song:
+        raise HTTPException(status_code=404, detail="Song not found")
+
+    db.delete(song)
+    db.commit()
+    return {"status": "deleted"}
