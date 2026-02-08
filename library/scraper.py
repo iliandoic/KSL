@@ -39,26 +39,39 @@ SECTION_MAP = {
     'refren': 'hook',
     'chorus': 'hook',
     'hook': 'hook',
+    'coro': 'hook',  # Spanish
+    'estribillo': 'hook',  # Spanish
+    'refrão': 'hook',  # Portuguese
     'припев': 'hook',  # Russian/Bulgarian
+    'refrain': 'hook',  # French
     # Pre-chorus
     'pre-refren': 'pre-hook',
     'pre-chorus': 'pre-hook',
     'prechorus': 'pre-hook',
+    'pre-coro': 'pre-hook',  # Spanish
     # Verses
     'verse': 'verse',
     'strofa': 'verse',
     'vers': 'verse',
+    'verso': 'verse',  # Spanish/Portuguese
+    'estrofa': 'verse',  # Spanish
     'куплет': 'verse',  # Russian
+    'couplet': 'verse',  # French
     # Bridge
     'bridge': 'bridge',
     'pod': 'bridge',
+    'puente': 'bridge',  # Spanish
+    'ponte': 'bridge',  # Portuguese
     'мост': 'bridge',
     # Intro/Outro
     'intro': 'intro',
+    'introducción': 'intro',  # Spanish
     'outro': 'outro',
+    'cierre': 'outro',  # Spanish
     # Post-chorus
     'post-chorus': 'post-hook',
     'post-refren': 'post-hook',
+    'post-coro': 'post-hook',  # Spanish
 }
 
 
