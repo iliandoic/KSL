@@ -1,16 +1,10 @@
+# Let Nixpacks auto-detect Python, add Node.js for frontend build
 [phases.setup]
-nixPkgs = ["nodejs_20", "python311"]
+nixPkgs = ["nodejs_20"]
 
-[phases.install]
-cmds = [
-    "pip install -r requirements.txt",
-    "cd ksl-web && npm install"
-]
-
+# After Python deps are installed, build frontend
 [phases.build]
-cmds = [
-    "cd ksl-web && npm run build"
-]
+cmds = ["cd ksl-web && npm install && npm run build"]
 
 [start]
 cmd = "uvicorn main:app --host 0.0.0.0 --port ${PORT:-8000}"
