@@ -321,13 +321,17 @@ export function SongsPage() {
                       const translation = getTranslation(lineKey);
                       return (
                         <div key={lIdx} className="group">
-                          <div className="text-zinc-200">{line}</div>
-                          {showTranslation && translation && (
-                            <div className={`text-sm mt-0.5 ${
-                              showTranslation === 'sonnet' ? 'text-purple-400' : 'text-amber-400'
-                            }`}>
-                              {translation}
-                            </div>
+                          {showTranslation && translation ? (
+                            <>
+                              <div className={`${
+                                showTranslation === 'sonnet' ? 'text-purple-300' : 'text-amber-300'
+                              }`}>
+                                {translation}
+                              </div>
+                              <div className="text-xs text-zinc-500 mt-0.5">{line}</div>
+                            </>
+                          ) : (
+                            <div className="text-zinc-200">{line}</div>
                           )}
                         </div>
                       );
