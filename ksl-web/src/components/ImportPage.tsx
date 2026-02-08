@@ -84,8 +84,12 @@ export function ImportPage() {
     });
   };
 
-  const selectAllSongs = () => {
+  const selectAllNewSongs = () => {
     setSelectedSongIds(new Set(notImportedSongs.map(s => s.id)));
+  };
+
+  const selectAllSongs = () => {
+    setSelectedSongIds(new Set(artistSongs.map(s => s.id)));
   };
 
   const deselectAllSongs = () => {
@@ -248,12 +252,29 @@ export function ImportPage() {
                     {selectedArtist.name} ({notImportedSongs.length} new, {importedSongs.length} imported)
                   </span>
                   <div className="flex items-center gap-2">
-                    <button
-                      onClick={selectedSongIds.size === notImportedSongs.length ? deselectAllSongs : selectAllSongs}
-                      className="px-2 py-1 text-xs text-zinc-400 hover:text-zinc-200"
-                    >
-                      {selectedSongIds.size === notImportedSongs.length ? 'Deselect All' : 'Select All New'}
-                    </button>
+                    {selectedSongIds.size > 0 ? (
+                      <button
+                        onClick={deselectAllSongs}
+                        className="px-2 py-1 text-xs text-zinc-400 hover:text-zinc-200"
+                      >
+                        Deselect All
+                      </button>
+                    ) : (
+                      <>
+                        <button
+                          onClick={selectAllNewSongs}
+                          className="px-2 py-1 text-xs text-zinc-400 hover:text-zinc-200"
+                        >
+                          Select New
+                        </button>
+                        <button
+                          onClick={selectAllSongs}
+                          className="px-2 py-1 text-xs text-teal-400 hover:text-teal-300"
+                        >
+                          Select All
+                        </button>
+                      </>
+                    )}
                     <button
                       onClick={() => { setSelectedArtist(null); setArtistSongs([]); setSelectedSongIds(new Set()); }}
                       className="text-xs text-zinc-500 hover:text-zinc-300"
@@ -302,17 +323,28 @@ export function ImportPage() {
                       className="flex items-center gap-2 text-xs text-zinc-500 hover:text-zinc-300 mb-2"
                     >
                       <span>{showImported ? '▼' : '▶'}</span>
-                      <span>Already imported ({importedSongs.length})</span>
+                      <span>Already imported ({importedSongs.length}) - click to re-import</span>
                     </button>
                     {showImported && (
                       <div className="max-h-32 overflow-y-auto space-y-1 pl-4">
                         {importedSongs.map(song => (
                           <div
                             key={song.id}
-                            className="flex items-center gap-2 px-3 py-2 rounded-lg text-sm bg-zinc-800/50 border border-zinc-700/50 text-zinc-500"
+                            onClick={() => toggleSongSelection(song.id)}
+                            className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm cursor-pointer transition-colors ${
+                              selectedSongIds.has(song.id)
+                                ? 'bg-teal-500/20 border border-teal-500'
+                                : 'bg-zinc-800/50 border border-zinc-700/50 hover:border-zinc-600'
+                            }`}
                           >
+                            <input
+                              type="checkbox"
+                              checked={selectedSongIds.has(song.id)}
+                              onChange={() => {}}
+                              className="accent-teal-500"
+                            />
                             <span className="text-green-500">✓</span>
-                            <span className="flex-1">{song.title}</span>
+                            <span className={`flex-1 ${selectedSongIds.has(song.id) ? 'text-white' : 'text-zinc-500'}`}>{song.title}</span>
                           </div>
                         ))}
                       </div>
