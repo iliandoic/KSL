@@ -300,20 +300,20 @@ def translate_lines(lines: list[str], target_lang: str = "en", model: str = "son
     if target_lang == "bg":
         lang_instruction = "Bulgarian (Cyrillic script)"
         if is_spanish:
-            style_instruction = """Превеждаш от ИСПАНСКИ (reggaeton/trap).
-Това е улична музика - дръзка, секси, агресивна.
+            style_instruction = """Превеждаш REGGAETON/LATIN TRAP от испански.
 
-ВАЖНО за испански сленг:
-- "safaera" = мръсотия, нещо яко/секси
-- "perreo" = кючек, dirty dancing
-- "bellaqueo" = флирт, секси поведение
-- "cabrón" = яко, брутално (не буквално)
-- "mami/papi" = мацка/мацане
-- "flow" = стил, усещане
+ПЪРВО прочети ЦЯЛАТА песен и разбери за какво е:
+- Това парти песен ли е? Секси песен? Агресивна?
+- Какво е настроението и посланието?
 
-Преведи СМИСЪЛА, не думите. Използвай български сленг който звучи естествено.
-Линиите трябва да се свързват и да текат като песен.
-Запази енергията - ако е секси, преводът е секси. Ако е агресивно, преводът е агресивен."""
+ПОСЛЕ превеждай с това разбиране. Думите имат РАЗЛИЧНИ значения в контекст!
+В секси песен "pegar" = да се залепиш/натиснеш, НЕ да биеш.
+В парти песен "romper" = да откачиш, НЕ да счупиш.
+
+Превеждай като човек който РАЗБИРА песента и я разказва на български.
+НЕ като речник който превежда дума по дума.
+
+Използвай естествен български улечен сленг."""
         else:
             style_instruction = """Преведи като носител на езика, не буквално.
 Използвай естествен български сленг и изрази.
@@ -328,30 +328,38 @@ If the original is edgy/sexy/aggressive, the translation should be too."""
 
     system = f"""You are helping a language learner understand song lyrics for personal study.
 The user found these lyrics online and wants to understand them in {lang_instruction}.
-This is for personal comprehension and language learning.
 
 {style_instruction}
 
-CRITICAL:
-- Translate the MEANING and FEELING, not dictionary definitions
-- Each line should connect to the next - this is a SONG, not random sentences
-- Think about what the artist is trying to say, then express that naturally
-- Keep it real - don't sanitize or soften the vibe
-- Output ONLY numbered translations, nothing else"""
+PROCESS:
+1. First, read ALL the lyrics and understand what the song is about
+2. Then translate each line with that context in mind
+3. Words have different meanings in different contexts - translate for THIS song's meaning
+
+Output format:
+- First line: Brief note about what the song is about (5-10 words max)
+- Then numbered translations (1. 2. 3. etc.)"""
 
     model_id = "claude-opus-4-5-20251101" if model == "opus" else "claude-sonnet-4-20250514"
 
     response = client.messages.create(
         model=model_id,
-        max_tokens=2000,
+        max_tokens=3000,
         system=system,
         messages=[
-            {"role": "user", "content": f"Help me understand these lyrics in {lang_instruction}:\n\n" + "\n".join(f"{i+1}. {l}" for i, l in enumerate(lines))},
-            {"role": "assistant", "content": "1."}
+            {"role": "user", "content": f"Translate to {lang_instruction}:\n\n" + "\n".join(f"{i+1}. {l}" for i, l in enumerate(lines))}
         ],
     )
 
-    result_text = "1." + response.content[0].text
+    result_text = response.content[0].text
+
+    # Skip the context line if present, then parse numbered lines
+    lines_split = result_text.strip().split("\n")
+    # Find where numbered translations start
+    for i, line in enumerate(lines_split):
+        if re.match(r'^1[\.\)]', line.strip()):
+            result_text = "\n".join(lines_split[i:])
+            break
     translations = _parse_numbered_lines(result_text, expected_count=len(lines))
 
     return translations
