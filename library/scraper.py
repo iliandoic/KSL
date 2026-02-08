@@ -8,11 +8,63 @@ from bs4 import BeautifulSoup
 
 USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
 
+# Map section headers to normalized section types
+SECTION_MAP = {
+    # Hooks/Chorus
+    'refren': 'hook',
+    'chorus': 'hook',
+    'hook': 'hook',
+    'припев': 'hook',  # Russian/Bulgarian
+    # Pre-chorus
+    'pre-refren': 'pre-hook',
+    'pre-chorus': 'pre-hook',
+    'prechorus': 'pre-hook',
+    # Verses
+    'verse': 'verse',
+    'strofa': 'verse',
+    'vers': 'verse',
+    'куплет': 'verse',  # Russian
+    # Bridge
+    'bridge': 'bridge',
+    'pod': 'bridge',
+    'мост': 'bridge',
+    # Intro/Outro
+    'intro': 'intro',
+    'outro': 'outro',
+    # Post-chorus
+    'post-chorus': 'post-hook',
+    'post-refren': 'post-hook',
+}
+
+
+def _normalize_section(header: str) -> str | None:
+    """Convert a section header like '[Refren]' to a normalized type."""
+    # Remove brackets and clean up
+    clean = header.strip('[]').lower()
+    # Remove numbers like "Verse 1" -> "verse"
+    clean = re.sub(r'\s*\d+\s*', '', clean)
+    # Remove parenthetical content like "(x2)"
+    clean = re.sub(r'\s*\(.*?\)\s*', '', clean)
+    clean = clean.strip()
+
+    # Check direct match
+    if clean in SECTION_MAP:
+        return SECTION_MAP[clean]
+
+    # Check if it starts with any known section
+    for key, val in SECTION_MAP.items():
+        if clean.startswith(key):
+            return val
+
+    return None
+
 
 def scrape_genius(url: str) -> dict:
     """
     Scrape lyrics from a Genius URL.
-    Returns {"title": str, "artist": str, "lyrics": str}
+    Returns {"title": str, "artist": str, "lyrics": str, "sections": list}
+
+    sections is a list of {"section": str, "lines": list[str]}
     """
     req = urllib.request.Request(url, headers={"User-Agent": USER_AGENT})
     resp = urllib.request.urlopen(req, timeout=15)
@@ -46,27 +98,51 @@ def scrape_genius(url: str) -> dict:
 
     raw_lyrics = "\n".join(parts).strip()
 
-    # Clean up: remove section headers like [Refren], [Verse 1], etc.
-    lines = []
+    # Parse with section awareness
+    sections = []
+    current_section = None
+    current_lines = []
+    all_lines = []  # For plain lyrics output
+
     for line in raw_lyrics.split("\n"):
         line = line.strip()
         if not line:
             continue
+
+        # Check if this is a section header
         if re.match(r"^\[.*\]$", line):
-            continue  # Skip section headers
+            # Save previous section if it has lines
+            if current_lines:
+                sections.append({
+                    "section": current_section or "verse",
+                    "lines": current_lines
+                })
+            # Start new section
+            current_section = _normalize_section(line)
+            current_lines = []
+            continue
+
+        # Skip junk lines
         if re.match(r"^\d+ Contributor", line):
-            continue  # Skip "2 Contributors" etc.
+            continue
         if line.endswith(" Lyrics"):
-            continue  # Skip title line like "CĂȚEL Lyrics"
-        # Skip lines that are just the song title/section label
+            continue
         if re.match(r'^[Vv]ersuri', line) or re.match(r'^\[Versuri', line):
             continue
-        lines.append(line)
 
-    lyrics = "\n".join(lines)
+        current_lines.append(line)
+        all_lines.append(line)
+
+    # Don't forget the last section
+    if current_lines:
+        sections.append({
+            "section": current_section or "verse",
+            "lines": current_lines
+        })
 
     return {
         "title": title,
         "artist": artist,
-        "lyrics": lyrics,
+        "lyrics": "\n".join(all_lines),
+        "sections": sections,
     }

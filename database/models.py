@@ -18,14 +18,34 @@ class Rhyme(Base):
     created_at = Column(DateTime, default=datetime.utcnow)
 
 
+class ImportedSong(Base):
+    """Track imported songs for structure analysis."""
+    __tablename__ = "imported_songs"
+
+    id = Column(Integer, primary_key=True)
+    title = Column(String(200))
+    artist = Column(String(200))
+    url = Column(String(500))
+    # Section counts for quick queries
+    hook_count = Column(Integer, default=0)
+    verse_count = Column(Integer, default=0)
+    has_intro = Column(Integer, default=0)  # 0 or 1
+    has_outro = Column(Integer, default=0)
+    has_bridge = Column(Integer, default=0)
+    total_lines = Column(Integer, default=0)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+
 class CorpusLine(Base):
     __tablename__ = "corpus_lines"
 
     id = Column(Integer, primary_key=True)
     line = Column(Text, nullable=False)
     source = Column(String(200))
+    song_id = Column(Integer, index=True)  # FK to imported_songs
     language = Column(String(20), default="bg")
     theme = Column(String(50))
+    section = Column(String(50))  # hook, verse, pre-hook, bridge, intro, outro
     syllables = Column(Integer)
     phonetic_ending = Column(String(50))
     created_at = Column(DateTime, default=datetime.utcnow)

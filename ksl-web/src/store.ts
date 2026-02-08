@@ -5,7 +5,13 @@ interface EditorLine {
   syllables: number | null;
 }
 
+type Page = 'studio' | 'import';
+
 interface AppState {
+  // Navigation
+  currentPage: Page;
+  setPage: (page: Page) => void;
+
   // Editor
   lines: EditorLine[];
   theme: string;
@@ -28,6 +34,9 @@ interface AppState {
 }
 
 export const useStore = create<AppState>((set, get) => ({
+  currentPage: 'studio',
+  setPage: (page) => set({ currentPage: page }),
+
   lines: [{ text: '', syllables: null }],
   theme: '',
   suggestions: [],

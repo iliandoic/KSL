@@ -6,7 +6,7 @@ export function Sidebar() {
   return (
     <div className="space-y-4">
       <RhymePanel />
-      <CorpusPanel />
+      <QuickImportLink />
     </div>
   );
 }
@@ -84,7 +84,7 @@ function RhymePanel() {
             </div>
           )}
           {!result.perfect.length && !result.near.length && !result.slant.length && (
-            <p className="text-zinc-500">No rhymes found. Try seeding the database first.</p>
+            <p className="text-zinc-500">No rhymes found. Try importing lyrics first.</p>
           )}
         </div>
       )}
@@ -92,105 +92,25 @@ function RhymePanel() {
   );
 }
 
-function CorpusPanel() {
-  const [text, setText] = useState('');
-  const [source, setSource] = useState('');
-  const [url, setUrl] = useState('');
-  const [status, setStatus] = useState('');
-  const { loading, setLoading } = useStore();
-
-  const ingest = async () => {
-    if (!text.trim()) return;
-    setLoading('ingest', true);
-    try {
-      const res = await api.corpusIngest(text.trim(), source || undefined);
-      setStatus(`Added ${res.lines_added} lines, ${res.words_added} words to rhyme DB`);
-      setText('');
-    } finally {
-      setLoading('ingest', false);
-    }
-  };
-
-  const ingestFromUrl = async () => {
-    if (!url.trim()) return;
-    setLoading('ingestUrl', true);
-    setStatus('');
-    try {
-      const res = await api.corpusIngestUrl(url.trim());
-      setStatus(`${res.artist} - ${res.title}: ${res.lines_added} lines, ${res.words_added} words`);
-      setUrl('');
-    } catch (e: unknown) {
-      setStatus(`Error: ${e instanceof Error ? e.message : 'Failed to scrape'}`);
-    } finally {
-      setLoading('ingestUrl', false);
-    }
-  };
-
-  const importAsStyle = async () => {
-    if (!text.trim()) return;
-    setLoading('ingest', true);
-    try {
-      await api.styleImport(text.trim(), 'reference', source || undefined);
-      setStatus('Imported as reference');
-      setText('');
-    } finally {
-      setLoading('ingest', false);
-    }
-  };
+function QuickImportLink() {
+  const { setPage } = useStore();
 
   return (
-    <div className="bg-zinc-900 rounded-xl p-4 border border-zinc-800">
-      <h3 className="text-sm font-bold text-amber-400 mb-2">Import Lyrics</h3>
-
-      <div className="flex gap-2 mb-3">
-        <input
-          value={url}
-          onChange={(e) => setUrl(e.target.value)}
-          onKeyDown={(e) => e.key === 'Enter' && ingestFromUrl()}
-          placeholder="Genius URL..."
-          className="bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-1.5 text-sm flex-1"
-        />
-        <button
-          onClick={ingestFromUrl}
-          disabled={loading['ingestUrl'] || !url.trim()}
-          className="bg-purple-600 text-white px-3 py-1.5 rounded-lg text-sm font-medium hover:bg-purple-500 disabled:opacity-50"
-        >
-          {loading['ingestUrl'] ? '...' : 'Scrape'}
-        </button>
-      </div>
-
-      <div className="border-t border-zinc-800 pt-3">
-        <input
-          value={source}
-          onChange={(e) => setSource(e.target.value)}
-          placeholder="Artist name (optional)"
-          className="bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-1.5 text-sm w-full mb-2"
-        />
-        <textarea
-          value={text}
-          onChange={(e) => setText(e.target.value)}
-          placeholder="Or paste lyrics here..."
-          rows={4}
-          className="bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2 text-sm w-full resize-none mb-2"
-        />
-        <div className="flex gap-2">
-          <button
-            onClick={ingest}
-            disabled={loading['ingest'] || !text.trim()}
-            className="bg-amber-500 text-black px-3 py-1.5 rounded-lg text-sm font-medium hover:bg-amber-400 disabled:opacity-50 flex-1"
-          >
-            {loading['ingest'] ? '...' : 'Add to Corpus'}
-          </button>
-          <button
-            onClick={importAsStyle}
-            disabled={loading['ingest'] || !text.trim()}
-            className="bg-zinc-700 text-zinc-300 px-3 py-1.5 rounded-lg text-sm font-medium hover:bg-zinc-600 disabled:opacity-50 flex-1"
-          >
-            Import as Style
-          </button>
+    <button
+      onClick={() => setPage('import')}
+      className="w-full bg-zinc-900 rounded-xl p-4 border border-zinc-800 hover:border-purple-500/50 transition-colors text-left group"
+    >
+      <div className="flex items-center gap-3">
+        <div className="w-10 h-10 rounded-lg bg-purple-500/20 flex items-center justify-center">
+          <svg className="w-5 h-5 text-purple-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
+          </svg>
+        </div>
+        <div>
+          <h3 className="text-sm font-bold text-zinc-200 group-hover:text-purple-400 transition-colors">Import Lyrics</h3>
+          <p className="text-xs text-zinc-500">Scrape from Genius or paste</p>
         </div>
       </div>
-      {status && <p className="text-xs text-green-400 mt-2">{status}</p>}
-    </div>
+    </button>
   );
 }
