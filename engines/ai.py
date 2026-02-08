@@ -342,23 +342,26 @@ Output format:
 
     model_id = "claude-opus-4-5-20251101" if model == "opus" else "claude-sonnet-4-20250514"
 
+    user_content = system + "\n\n" + f"Translate to {lang_instruction}:\n\n" + "\n".join(f"{i+1}. {l}" for i, l in enumerate(lines))
+
     # Use extended thinking for better context understanding
     response = client.messages.create(
         model=model_id,
         max_tokens=16000,
+        temperature=1,  # Required for extended thinking
         thinking={
             "type": "enabled",
             "budget_tokens": 5000
         },
         messages=[
-            {"role": "user", "content": system + "\n\n" + f"Translate to {lang_instruction}:\n\n" + "\n".join(f"{i+1}. {l}" for i, l in enumerate(lines))}
+            {"role": "user", "content": user_content}
         ],
     )
 
     # Extract text from response (skip thinking blocks)
     result_text = ""
     for block in response.content:
-        if block.type == "text":
+        if hasattr(block, 'text'):
             result_text = block.text
             break
 
