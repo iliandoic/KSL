@@ -294,24 +294,38 @@ def translate_lines(lines: list[str], target_lang: str = "en", model: str = "son
     client = _get_client()
 
     if target_lang == "bg":
-        lang_instruction = "Bulgarian (use Cyrillic script)"
+        lang_instruction = "Bulgarian (Cyrillic script)"
+        style_instruction = """Преведи като носител на езика, не буквално.
+Използвай естествен български сленг и изрази.
+Запази емоцията и енергията - дързък, уличен стил.
+Ако оригиналът е дръзък/секси/агресивен, преводът също трябва да е."""
     else:
         lang_instruction = "English"
+        style_instruction = """Translate naturally, not word-for-word.
+Use natural slang and expressions that capture the vibe.
+Keep the emotion and energy - bold, street style.
+If the original is edgy/sexy/aggressive, the translation should be too."""
 
-    system = """Expert translator for song lyrics. Preserve:
-- Slang and street language feel
-- Emotional tone and attitude
-- Rhyme patterns when possible
-Output only numbered translations, nothing else."""
+    system = f"""You are helping a language learner understand song lyrics for personal study.
+The user found these lyrics online and wants to understand them in {lang_instruction}.
+This is for personal comprehension and language learning.
+
+{style_instruction}
+
+IMPORTANT:
+- Translate the MEANING and FEELING, not just words
+- Lines should flow together naturally as a song
+- Keep it real - don't sanitize or soften the vibe
+- Output ONLY numbered translations, nothing else"""
 
     model_id = "claude-opus-4-5-20251101" if model == "opus" else "claude-sonnet-4-20250514"
 
     response = client.messages.create(
         model=model_id,
-        max_tokens=1000,
+        max_tokens=2000,
         system=system,
         messages=[
-            {"role": "user", "content": f"Translate to {lang_instruction}:\n" + "\n".join(f"{i+1}. {l}" for i, l in enumerate(lines))},
+            {"role": "user", "content": f"Help me understand these lyrics in {lang_instruction}:\n\n" + "\n".join(f"{i+1}. {l}" for i, l in enumerate(lines))},
             {"role": "assistant", "content": "1."}
         ],
     )
