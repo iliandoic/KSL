@@ -6,7 +6,7 @@ from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from database.connection import get_db
-from database.models import ScrapedSong
+from database.models import ScrapedSong, ArtistStudy, ArtistRhymeGroup
 from library.study import study_song, get_artist_study, get_all_studied_artists
 
 router = APIRouter(prefix="/api/study", tags=["study"])
@@ -63,3 +63,26 @@ def learn_from_song(request: LearnRequest, db: Session = Depends(get_db)):
         raise HTTPException(status_code=400, detail=result["error"])
 
     return LearnResponse(**result)
+
+
+@router.delete("/{artist}")
+def delete_artist_data(artist: str, db: Session = Depends(get_db)):
+    """Delete all data for an artist (songs, study, rhyme groups). Start fresh."""
+    # Delete scraped songs for this artist
+    songs_deleted = db.query(ScrapedSong).filter(ScrapedSong.artist == artist).delete()
+
+    # Delete artist study
+    study_deleted = db.query(ArtistStudy).filter(ArtistStudy.artist == artist).delete()
+
+    # Delete rhyme groups
+    groups_deleted = db.query(ArtistRhymeGroup).filter(ArtistRhymeGroup.artist == artist).delete()
+
+    db.commit()
+
+    return {
+        "status": "deleted",
+        "artist": artist,
+        "songs_deleted": songs_deleted,
+        "study_deleted": study_deleted,
+        "rhyme_groups_deleted": groups_deleted
+    }

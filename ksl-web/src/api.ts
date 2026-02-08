@@ -199,6 +199,9 @@ export const api = {
       prompts_added: number;
     }>('/study/learn', { scraped_song_id: scrapedSongId }),
 
+  studyDeleteArtist: (artist: string) =>
+    fetch(`${BASE}/study/${encodeURIComponent(artist)}`, { method: 'DELETE' }).then(r => r.json()),
+
   // Freestyle API
   freestyleSpark: () =>
     get<{ type: string; value: string; group?: string }>('/freestyle/spark'),
