@@ -82,12 +82,51 @@ def get_song_details(song_id: int) -> dict:
     response.raise_for_status()
 
     song = response.json().get("response", {}).get("song", {})
+    primary = song.get("primary_artist", {})
     return {
         "id": song.get("id"),
         "title": song.get("title"),
         "url": song.get("url"),
-        "primary_artist": song.get("primary_artist", {}).get("name"),
-        "featured_artists": [a.get("name") for a in song.get("featured_artists", [])],
+        "primary_artist": primary.get("name"),
+        "primary_artist_image": primary.get("image_url"),
+        "featured_artists": [
+            {"name": a.get("name"), "image": a.get("image_url")}
+            for a in song.get("featured_artists", [])
+        ],
         "release_date": song.get("release_date_for_display"),
         "description": song.get("description", {}).get("plain") if song.get("description") else None,
     }
+
+
+def get_song_id_from_url(url: str) -> int | None:
+    """Extract song ID from Genius URL by fetching the page."""
+    import re
+    # Try to get song ID from the API by searching for the URL
+    # Genius URLs don't contain the ID directly, so we need to search
+    try:
+        # Extract the slug from URL
+        match = re.search(r'genius\.com/(.+?)(?:-lyrics)?/?$', url)
+        if not match:
+            return None
+        slug = match.group(1)
+
+        # Search for the song
+        response = requests.get(
+            f"{BASE_URL}/search",
+            params={"q": slug.replace("-", " ")},
+            headers=_headers()
+        )
+        response.raise_for_status()
+
+        hits = response.json().get("response", {}).get("hits", [])
+        for hit in hits:
+            result = hit.get("result", {})
+            if result.get("url", "").rstrip("/") == url.rstrip("/"):
+                return result.get("id")
+
+        # If exact match not found, return first result
+        if hits:
+            return hits[0].get("result", {}).get("id")
+    except Exception:
+        pass
+    return None

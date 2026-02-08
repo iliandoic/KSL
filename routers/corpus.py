@@ -9,6 +9,7 @@ from database.connection import get_db
 from database.models import ScrapedSong
 from library.corpus import ingest_lyrics, search_lines, get_corpus_stats, get_imported_songs
 from library.scraper import scrape_genius
+from library.genius_api import get_song_id_from_url, get_song_details
 from library.study import study_song
 from engines.ai import translate_lines
 
@@ -178,6 +179,21 @@ def scrape_and_study(req: ScrapeAndStudyRequest, db: Session = Depends(get_db)):
     original_text = scraped["lyrics"]
     sections = scraped["sections"]
 
+    # 1b. Get structured artist data from Genius API
+    primary_artist = None
+    primary_artist_image = None
+    featured_artists = []
+
+    song_id = get_song_id_from_url(req.url)
+    if song_id:
+        try:
+            details = get_song_details(song_id)
+            primary_artist = details.get("primary_artist")
+            primary_artist_image = details.get("primary_artist_image")
+            featured_artists = details.get("featured_artists", [])
+        except Exception:
+            pass  # Fall back to scraped artist string
+
     # 2. Detect language and translate if needed
     language = _detect_language(original_text)
     translations = {}
@@ -207,6 +223,9 @@ def scrape_and_study(req: ScrapeAndStudyRequest, db: Session = Depends(get_db)):
         song.artist = artist
         song.original_text = original_text
         song.sections_json = json.dumps(sections, ensure_ascii=False)
+        song.primary_artist = primary_artist
+        song.primary_artist_image = primary_artist_image
+        song.featured_artists_json = json.dumps(featured_artists, ensure_ascii=False) if featured_artists else None
         if req.model == "sonnet":
             song.sonnet_translations_json = json.dumps(translations, ensure_ascii=False)
         else:
@@ -218,6 +237,9 @@ def scrape_and_study(req: ScrapeAndStudyRequest, db: Session = Depends(get_db)):
             url=req.url,
             original_text=original_text,
             sections_json=json.dumps(sections, ensure_ascii=False),
+            primary_artist=primary_artist,
+            primary_artist_image=primary_artist_image,
+            featured_artists_json=json.dumps(featured_artists, ensure_ascii=False) if featured_artists else None,
         )
         if req.model == "sonnet":
             song.sonnet_translations_json = json.dumps(translations, ensure_ascii=False)

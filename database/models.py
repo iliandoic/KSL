@@ -123,11 +123,15 @@ class ScrapedSong(Base):
 
     id = Column(Integer, primary_key=True)
     title = Column(String(200))
-    artist = Column(String(200))
+    artist = Column(String(200))  # Legacy combined artist string
     url = Column(String(500))
     original_text = Column(Text)  # Raw scraped lyrics
     sections_json = Column(Text)  # JSON: [{section: str, lines: [str]}]
     sonnet_translations_json = Column(Text)  # JSON: {lineKey: translation}
     opus_translations_json = Column(Text)  # JSON: {lineKey: translation}
+    # Structured artist data from Genius API
+    primary_artist = Column(String(200))
+    primary_artist_image = Column(String(500))
+    featured_artists_json = Column(Text)  # JSON: [{"name": "...", "image": "..."}]
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)

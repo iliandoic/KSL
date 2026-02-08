@@ -2,11 +2,19 @@ import { useState, useEffect } from 'react';
 import { api } from '../api';
 import { useStore } from '../store';
 
+interface FeaturedArtist {
+  name: string;
+  image: string;
+}
+
 interface ScrapedSongSummary {
   id: number;
   title: string;
   artist: string;
   url: string;
+  primary_artist: string | null;
+  primary_artist_image: string | null;
+  featured_artists: FeaturedArtist[];
   has_sonnet: boolean;
   has_opus: boolean;
   created_at: string;
@@ -17,6 +25,9 @@ interface ScrapedSongFull {
   title: string;
   artist: string;
   url: string;
+  primary_artist: string | null;
+  primary_artist_image: string | null;
+  featured_artists: FeaturedArtist[];
   original_text: string;
   sections: { section: string; lines: string[] }[];
   sonnet_translations: Record<string, string>;
@@ -27,7 +38,53 @@ export function SongsPage() {
   const [songs, setSongs] = useState<ScrapedSongSummary[]>([]);
   const [selectedSong, setSelectedSong] = useState<ScrapedSongFull | null>(null);
   const [showTranslation, setShowTranslation] = useState<'sonnet' | 'opus' | null>('sonnet');
+  const [artistFilter, setArtistFilter] = useState<string>('');
   const { loading, setLoading } = useStore();
+
+  // Get all artists from a song (primary + featured)
+  const getSongArtists = (song: ScrapedSongSummary): string[] => {
+    const artists: string[] = [];
+    if (song.primary_artist) {
+      artists.push(song.primary_artist);
+    }
+    if (song.featured_artists) {
+      artists.push(...song.featured_artists.map(a => a.name));
+    }
+    // Fallback to legacy artist string parsing if no structured data
+    if (artists.length === 0 && song.artist) {
+      return song.artist
+        .split(/\s*(?:&|,|\bfeat\.?\b|\bfeaturing\b|\bft\.?\b|\bx\b|\bX\b)\s*/i)
+        .map(a => a.trim())
+        .filter(a => a.length > 0);
+    }
+    return artists;
+  };
+
+  // Get unique individual artists for filter with images
+  const artistMap = new Map<string, string | null>();
+  songs.forEach(s => {
+    if (s.primary_artist) {
+      artistMap.set(s.primary_artist, s.primary_artist_image);
+    }
+    s.featured_artists?.forEach(fa => {
+      if (!artistMap.has(fa.name)) {
+        artistMap.set(fa.name, fa.image);
+      }
+    });
+    // Fallback for legacy songs
+    if (!s.primary_artist && s.artist) {
+      getSongArtists(s).forEach(name => {
+        if (!artistMap.has(name)) {
+          artistMap.set(name, null);
+        }
+      });
+    }
+  });
+  const artists = [...artistMap.keys()].sort();
+
+  const filteredSongs = artistFilter
+    ? songs.filter(s => getSongArtists(s).includes(artistFilter))
+    : songs;
 
   useEffect(() => {
     loadSongs();
@@ -84,18 +141,50 @@ export function SongsPage() {
       <div className="w-80 border-r border-zinc-800 overflow-y-auto">
         <div className="p-4 border-b border-zinc-800">
           <h2 className="text-lg font-bold text-amber-400">Saved Songs</h2>
-          <p className="text-xs text-zinc-500 mt-1">{songs.length} songs</p>
+          <p className="text-xs text-zinc-500 mt-1">
+            {artistFilter ? `${filteredSongs.length} of ${songs.length}` : songs.length} songs
+          </p>
+          {artists.length > 1 && (
+            <div className="mt-2 space-y-1 max-h-48 overflow-y-auto">
+              <button
+                onClick={() => setArtistFilter('')}
+                className={`w-full text-left px-2 py-1.5 rounded text-sm transition-colors ${
+                  !artistFilter ? 'bg-amber-500/20 text-amber-400' : 'hover:bg-zinc-700 text-zinc-400'
+                }`}
+              >
+                All Artists
+              </button>
+              {artists.map(artist => (
+                <button
+                  key={artist}
+                  onClick={() => setArtistFilter(artist)}
+                  className={`w-full text-left px-2 py-1.5 rounded text-sm transition-colors flex items-center gap-2 ${
+                    artistFilter === artist ? 'bg-amber-500/20 text-amber-400' : 'hover:bg-zinc-700 text-zinc-300'
+                  }`}
+                >
+                  {artistMap.get(artist) && (
+                    <img
+                      src={artistMap.get(artist)!}
+                      alt={artist}
+                      className="w-6 h-6 rounded-full object-cover"
+                    />
+                  )}
+                  <span className="truncate">{artist}</span>
+                </button>
+              ))}
+            </div>
+          )}
         </div>
 
         {loading['songs'] ? (
           <div className="p-4 text-zinc-500">Loading...</div>
-        ) : songs.length === 0 ? (
+        ) : filteredSongs.length === 0 ? (
           <div className="p-4 text-zinc-500 text-sm">
-            No songs yet. Go to Import to add some.
+            {songs.length === 0 ? 'No songs yet. Go to Import to add some.' : 'No songs match filter.'}
           </div>
         ) : (
           <div className="divide-y divide-zinc-800">
-            {songs.map(song => (
+            {filteredSongs.map(song => (
               <div
                 key={song.id}
                 onClick={() => selectSong(song.id)}
@@ -148,12 +237,38 @@ export function SongsPage() {
             {/* Header */}
             <div className="mb-6">
               <h2 className="text-2xl font-bold">{selectedSong.title}</h2>
-              <div className="text-zinc-400">{selectedSong.artist}</div>
+              <div className="flex items-center gap-3 mt-2">
+                {selectedSong.primary_artist_image && (
+                  <img
+                    src={selectedSong.primary_artist_image}
+                    alt={selectedSong.primary_artist || ''}
+                    className="w-10 h-10 rounded-full object-cover"
+                  />
+                )}
+                <div>
+                  <div className="text-zinc-300">
+                    {selectedSong.primary_artist || selectedSong.artist}
+                  </div>
+                  {selectedSong.featured_artists?.length > 0 && (
+                    <div className="flex items-center gap-2 mt-1">
+                      <span className="text-xs text-zinc-500">feat.</span>
+                      {selectedSong.featured_artists.map((fa, i) => (
+                        <div key={i} className="flex items-center gap-1">
+                          {fa.image && (
+                            <img src={fa.image} alt={fa.name} className="w-5 h-5 rounded-full object-cover" />
+                          )}
+                          <span className="text-xs text-zinc-400">{fa.name}</span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </div>
               <a
                 href={selectedSong.url}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="text-xs text-teal-400 hover:underline"
+                className="text-xs text-teal-400 hover:underline mt-2 inline-block"
               >
                 View on Genius
               </a>
