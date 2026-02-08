@@ -2,18 +2,36 @@
 Genius lyrics scraper. Fetches lyrics from a Genius URL.
 """
 import re
+import time
+import random
 import requests
 
 from bs4 import BeautifulSoup
 
-HEADERS = {
-    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-    "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8",
-    "Accept-Language": "en-US,en;q=0.5",
-    "Accept-Encoding": "gzip, deflate, br",
-    "Connection": "keep-alive",
-    "Upgrade-Insecure-Requests": "1",
-}
+# Rotate user agents to avoid detection
+USER_AGENTS = [
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:121.0) Gecko/20100101 Firefox/121.0",
+    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.2 Safari/605.1.15",
+]
+
+def _get_headers():
+    return {
+        "User-Agent": random.choice(USER_AGENTS),
+        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8",
+        "Accept-Language": "en-US,en;q=0.5",
+        "Accept-Encoding": "gzip, deflate, br",
+        "Connection": "keep-alive",
+        "Upgrade-Insecure-Requests": "1",
+        "Sec-Fetch-Dest": "document",
+        "Sec-Fetch-Mode": "navigate",
+        "Sec-Fetch-Site": "none",
+        "Cache-Control": "max-age=0",
+    }
+
+# Session for persistent cookies
+_session = requests.Session()
 
 # Map section headers to normalized section types
 SECTION_MAP = {
@@ -66,16 +84,32 @@ def _normalize_section(header: str) -> str | None:
     return None
 
 
-def scrape_genius(url: str) -> dict:
+def scrape_genius(url: str, retry_count: int = 2) -> dict:
     """
     Scrape lyrics from a Genius URL.
     Returns {"title": str, "artist": str, "lyrics": str, "sections": list}
 
     sections is a list of {"section": str, "lines": list[str]}
     """
-    resp = requests.get(url, headers=HEADERS, timeout=15)
-    resp.raise_for_status()
-    html = resp.text
+    # Small random delay to avoid rate limiting
+    time.sleep(random.uniform(0.5, 1.5))
+
+    last_error = None
+    for attempt in range(retry_count + 1):
+        try:
+            resp = _session.get(url, headers=_get_headers(), timeout=20)
+            resp.raise_for_status()
+            html = resp.text
+            break
+        except requests.exceptions.HTTPError as e:
+            last_error = e
+            if e.response.status_code == 403 and attempt < retry_count:
+                # Wait longer and retry
+                time.sleep(random.uniform(2, 4))
+                continue
+            raise
+    else:
+        raise last_error
 
     soup = BeautifulSoup(html, "html.parser")
 
